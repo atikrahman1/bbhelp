@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Manage Copy Commands</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff41;
+      margin: 0;
+      max-width: 900px;
+    }
+    h2 {
+      color: #00ff41;
+      margin-bottom: 20px;
+    }
+    .info {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      color: #888;
+    }
+    .info ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .info li {
+      margin: 5px 0;
+    }
+    .example {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 3px;
+      margin-top: 10px;
+      font-family: monospace;
+      color: #f39c12;
+    }
+    .command-list {
+      margin-bottom: 20px;
+    }
+    .command-item {
+      background: #2a2a2a;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border-left: 3px solid #16a085;
+    }
+    .command-item input {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      background: #1a1a1a;
+      color: #00ff41;
+      border: 2px solid #00ff41;
+      border-radius: 3px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .command-item label {
+      display: block;
+      margin-top: 10px;
+      color: #888;
+      font-size: 12px;
+    }
+    .command-item .delete-btn {
+      background: #e74c3c;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .command-item .delete-btn:hover {
+      background: #c0392b;
+    }
+    .buttons {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #fff;
+    }
+    .save-btn {
+      background: #2ecc71;
+    }
+    .save-btn:hover {
+      background: #27ae60;
+    }
+    .add-btn {
+      background: #3498db;
+    }
+    .add-btn:hover {
+      background: #2980b9;
+    }
+    .reset-btn {
+      background: #e74c3c;
+    }
+    .reset-btn:hover {
+      background: #c0392b;
+    }
+    .message {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+    .message.success {
+      background: #2ecc71;
+      color: #000;
+    }
+    .message.error {
+      background: #e74c3c;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h2>Manage Copy Commands</h2>
+  <div class="info">
+    <strong>Available Variables:</strong>
+    <ul>
+      <li><strong>{URL}</strong> - Full URL with path and parameters (e.g., https://test.com/path?param=value)</li>
+      <li><strong>{DOMAIN}</strong> - Domain without www (e.g., test.com)</li>
+      <li><strong>{ORIGIN}</strong> - Protocol + domain (e.g., https://test.com)</li>
+      <li><strong>{TARGET}</strong> - Domain with port if any (e.g., test.com:8080)</li>
+      <li><strong>{HOST}</strong> - Same as TARGET</li>
+      <li><strong>{PROTOCOL}</strong> - http or https</li>
+      <li><strong>{PATH}</strong> - URL path (e.g., /api/users)</li>
+    </ul>
+    <div class="example">
+      Example:<br>
+      Name: SQLMap Scan<br>
+      Command: python3 sqlmap.py -u {URL} --dbs
+    </div>
+  </div>
+  
+  <div class="command-list" id="command-list"></div>
+  
+  <div class="buttons">
+    <button class="save-btn" id="save-btn">Save All</button>
+    <button class="add-btn" id="add-btn">Add New Command</button>
+    <button class="reset-btn" id="reset-btn">Reset to Default</button>
+  </div>
+  <div class="message" id="message"></div>
+  
+  <script src="commands.js"></script>
+</body>
+</html>

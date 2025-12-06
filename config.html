@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Configure Sensitive Files</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff41;
+      margin: 0;
+    }
+    h2 {
+      color: #00ff41;
+      margin-bottom: 20px;
+    }
+    .info {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      color: #888;
+    }
+    textarea {
+      width: 100%;
+      height: 400px;
+      background: #2a2a2a;
+      color: #00ff41;
+      border: 2px solid #00ff41;
+      border-radius: 5px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 14px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .buttons {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #fff;
+    }
+    .save-btn {
+      background: #2ecc71;
+    }
+    .save-btn:hover {
+      background: #27ae60;
+    }
+    .reset-btn {
+      background: #e74c3c;
+    }
+    .reset-btn:hover {
+      background: #c0392b;
+    }
+    .message {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+    .message.success {
+      background: #2ecc71;
+      color: #000;
+    }
+    .message.error {
+      background: #e74c3c;
+      color: #fff;
+    }
+    input[type="number"] {
+      width: 100px;
+      padding: 8px;
+      background: #1a1a1a;
+      color: #00ff41;
+      border: 2px solid #00ff41;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Configure Sensitive Files List</h2>
+  <div class="info">
+    Enter one file path per line. The scanner will check these files on every page load when enabled.
+  </div>
+  <textarea id="files-list"></textarea>
+  
+  <div class="info" style="margin-top: 20px;">
+    <label for="preview-length" style="display: block; margin-bottom: 5px;">Preview Length (characters):</label>
+    <input type="number" id="preview-length" min="5" max="500" value="10">
+  </div>
+  
+  <div class="info" style="margin-top: 20px;">
+    <label for="rescan-interval" style="display: block; margin-bottom: 5px;">Rescan Interval (hours):</label>
+    <input type="number" id="rescan-interval" min="1" max="168" value="12">
+    <p style="color: #888; font-size: 12px; margin-top: 5px;">How long to wait before rescanning the same website (1-168 hours)</p>
+  </div>
+  
+  <div class="buttons">
+    <button class="save-btn" id="save-btn">Save</button>
+    <button class="reset-btn" id="reset-btn">Reset to Default</button>
+  </div>
+  <div class="message" id="message"></div>
+  
+  <script src="config.js"></script>
+</body>
+</html>

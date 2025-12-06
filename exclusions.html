@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Manage Exclusion List</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff41;
+      margin: 0;
+    }
+    h2 {
+      color: #00ff41;
+      margin-bottom: 20px;
+    }
+    .info {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      color: #888;
+    }
+    .info ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .info li {
+      margin: 5px 0;
+    }
+    .example {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 3px;
+      margin-top: 10px;
+      font-family: monospace;
+      color: #f39c12;
+    }
+    textarea {
+      width: 100%;
+      height: 300px;
+      background: #2a2a2a;
+      color: #00ff41;
+      border: 2px solid #00ff41;
+      border-radius: 5px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 14px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .buttons {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #fff;
+    }
+    .save-btn {
+      background: #2ecc71;
+    }
+    .save-btn:hover {
+      background: #27ae60;
+    }
+    .clear-btn {
+      background: #e74c3c;
+    }
+    .clear-btn:hover {
+      background: #c0392b;
+    }
+    .message {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+    .message.success {
+      background: #2ecc71;
+      color: #000;
+    }
+    .message.error {
+      background: #e74c3c;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h2>Manage Exclusion List</h2>
+  <div class="info">
+    <strong>Excluded domains will NOT be auto-scanned.</strong>
+    <p>Enter one domain pattern per line. Supports wildcards:</p>
+    <ul>
+      <li><strong>*.google.com</strong> - Excludes all Google subdomains (mail.google.com, drive.google.com, etc.)</li>
+      <li><strong>example.com</strong> - Excludes only example.com</li>
+      <li><strong>*.example.*</strong> - Excludes all subdomains and TLDs</li>
+    </ul>
+    <div class="example">
+      Example:<br>
+      *.google.com<br>
+      localhost<br>
+      127.0.0.1<br>
+      *.internal.company.com
+    </div>
+  </div>
+  <textarea id="exclusion-list" placeholder="Enter domain patterns, one per line..."></textarea>
+  
+  <div class="buttons">
+    <button class="save-btn" id="save-btn">Save</button>
+    <button class="clear-btn" id="clear-btn">Clear All</button>
+  </div>
+  <div class="message" id="message"></div>
+  
+  <script src="exclusions.js"></script>
+</body>
+</html>

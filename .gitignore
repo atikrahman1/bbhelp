@@ -1,0 +1,26 @@
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+
+# Logs
+*.log
+
+# Node modules (if you add npm later)
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# Kiro chat history (local only)
+.kiro/

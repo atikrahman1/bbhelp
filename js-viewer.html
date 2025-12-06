@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Extracted JS Files & Endpoints</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #00ff41; margin: 0; font-size: 16px; }
+    h2 { color: #00ff41; margin-bottom: 10px; font-size: 24px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab { background: #2a2a2a; color: #888; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; }
+    .tab.active { background: #00ff41; color: #000; font-weight: bold; }
+    .tab:hover { background: #333; }
+    .tab.active:hover { background: #00ff41; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .info { background: #2a2a2a; padding: 10px; border-radius: 5px; margin-bottom: 20px; color: #888; font-size: 14px; }
+    .js-file { background: #2a2a2a; padding: 12px; margin: 8px 0; border-radius: 5px; border-left: 3px solid #00ff41; display: flex; justify-content: space-between; align-items: center; }
+    .js-file a { color: #3498db; text-decoration: none; word-break: break-all; flex: 1; }
+    .js-file a:hover { color: #5dade2; text-decoration: underline; }
+    .endpoint-item { background: #2a2a2a; padding: 12px; margin: 8px 0; border-radius: 5px; border-left: 3px solid #f39c12; }
+    .endpoint-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .endpoint-path { color: #3498db; font-size: 16px; word-break: break-all; }
+    .method { padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; margin-right: 10px; }
+    .method.GET { background: #2ecc71; color: #000; }
+    .method.POST { background: #f39c12; color: #000; }
+    .method.PUT { background: #3498db; color: #fff; }
+    .method.DELETE { background: #e74c3c; color: #fff; }
+    .method.PATCH { background: #9b59b6; color: #fff; }
+    .confidence { padding: 4px 8px; border-radius: 3px; font-size: 12px; background: #555; color: #fff; }
+    .confidence.high { background: #2ecc71; color: #000; }
+    .confidence.medium { background: #f39c12; color: #000; }
+    .endpoint-meta { font-size: 12px; color: #888; margin-top: 5px; }
+    .copy-btn { background: #3498db; color: #fff; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 10px; white-space: nowrap; }
+    .copy-btn:hover { background: #2980b9; }
+    .action-btn { background: #2ecc71; color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 10px; margin-bottom: 20px; }
+    .action-btn:hover { background: #27ae60; }
+    .action-btn:disabled { background: #555; cursor: not-allowed; }
+    .progress { background: #2a2a2a; padding: 15px; border-radius: 5px; margin-bottom: 20px; display: none; }
+    .progress-bar { background: #555; height: 20px; border-radius: 10px; overflow: hidden; }
+    .progress-fill { background: #00ff41; height: 100%; transition: width 0.3s; width: 0%; }
+    .progress-text { color: #888; margin-top: 10px; font-size: 14px; }
+    .count { color: #888; font-size: 14px; }
+    .no-files { color: #e74c3c; padding: 20px; text-align: center; }
+    .no-secrets { text-align: center; padding: 40px; color: #2ecc71; font-size: 18px; }
+    .warning { background: #e74c3c; color: #fff; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
+    .secret-item { background: #2a2a2a; padding: 15px; margin: 12px 0; border-radius: 5px; border-left: 4px solid #e74c3c; }
+    .secret-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .secret-type { color: #e74c3c; font-weight: bold; font-size: 16px; text-transform: uppercase; }
+    .confidence.low { background: #95a5a6; color: #000; }
+    .secret-value { background: #1a1a1a; padding: 10px; border-radius: 3px; margin: 10px 0; color: #f39c12; word-break: break-all; font-size: 13px; }
+    .secret-meta { font-size: 12px; color: #888; margin-top: 10px; }
+    .meta-row { margin: 5px 0; }
+    .meta-label { color: #666; display: inline-block; width: 80px; }
+    .file-link { color: #3498db; text-decoration: none; word-break: break-all; }
+    .file-link:hover { color: #5dade2; text-decoration: underline; }
+    .context { background: #1a1a1a; padding: 8px; border-radius: 3px; margin-top: 5px; color: #95a5a6; font-size: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h2>JS Files & Endpoints</h2>
+  <div class="tabs">
+    <button class="tab active" data-tab="files">JS Files (<span id="files-count">0</span>)</button>
+    <button class="tab" data-tab="endpoints">Endpoints (<span id="endpoint-count">0</span>)</button>
+    <button class="tab" data-tab="secrets">Secrets (<span id="secrets-count">0</span>)</button>
+  </div>
+  
+  <div id="files-tab" class="tab-content active">
+    <div class="info">Filtered out: Chrome extensions, Analytics, Common libraries, CDN libraries, Social widgets, Ad networks</div>
+    <button class="action-btn" id="copy-all-btn">Copy All URLs</button>
+    <button class="action-btn" id="extract-btn">Extract Endpoints</button>
+    <button class="action-btn" id="scan-secrets-btn" style="background: #e74c3c;">Scan for Secrets</button>
+    <div class="progress" id="progress">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text">Extracting endpoints...</div>
+    </div>
+    <div id="files-list"></div>
+  </div>
+  
+  <div id="endpoints-tab" class="tab-content">
+    <div class="info">Extracted API endpoints from JavaScript files with confidence scores</div>
+    <button class="action-btn" id="copy-all-endpoints-btn">Copy All Endpoints</button>
+    <button class="action-btn" id="export-endpoints-btn">Export JSON</button>
+    <div id="endpoints-list"></div>
+  </div>
+  
+  <div id="secrets-tab" class="tab-content">
+    <div class="info">Scanned JavaScript files for exposed secrets, API keys, and credentials</div>
+    <button class="action-btn" id="copy-all-secrets-btn">Copy All Secrets</button>
+    <button class="action-btn" id="export-secrets-btn">Export JSON</button>
+    <div class="progress" id="secrets-progress">
+      <div class="progress-bar"><div class="progress-fill" id="secrets-progress-fill"></div></div>
+      <div class="progress-text" id="secrets-progress-text">Scanning for secrets...</div>
+    </div>
+    <div id="secrets-list"></div>
+  </div>
+  
+  <script type="module" src="js-viewer.js"></script>
+</body>
+</html>

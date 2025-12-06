@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Manage Google Dorks</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff41;
+      margin: 0;
+      max-width: 900px;
+    }
+    h2 {
+      color: #00ff41;
+      margin-bottom: 20px;
+    }
+    .info {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      color: #888;
+    }
+    .info ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    .info li {
+      margin: 5px 0;
+    }
+    .example {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 3px;
+      margin-top: 10px;
+      font-family: monospace;
+      color: #f39c12;
+    }
+    .dork-list {
+      margin-bottom: 20px;
+    }
+    .dork-item {
+      background: #2a2a2a;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border-left: 3px solid #9b59b6;
+    }
+    .dork-item input {
+      width: 100%;
+      padding: 8px;
+      margin: 5px 0;
+      background: #1a1a1a;
+      color: #00ff41;
+      border: 2px solid #00ff41;
+      border-radius: 3px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .dork-item label {
+      display: block;
+      margin-top: 10px;
+      color: #888;
+      font-size: 12px;
+    }
+    .dork-item .delete-btn {
+      background: #e74c3c;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-size: 12px;
+    }
+    .dork-item .delete-btn:hover {
+      background: #c0392b;
+    }
+    .buttons {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #fff;
+    }
+    .save-btn {
+      background: #2ecc71;
+    }
+    .save-btn:hover {
+      background: #27ae60;
+    }
+    .add-btn {
+      background: #3498db;
+    }
+    .add-btn:hover {
+      background: #2980b9;
+    }
+    .reset-btn {
+      background: #e74c3c;
+    }
+    .reset-btn:hover {
+      background: #c0392b;
+    }
+    .message {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+    }
+    .message.success {
+      background: #2ecc71;
+      color: #000;
+    }
+    .message.error {
+      background: #e74c3c;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h2>Manage Google Dorks</h2>
+  <div class="info">
+    <strong>Available Variable:</strong>
+    <ul>
+      <li><strong>{DOMAIN}</strong> - Current domain without www (e.g., test.com)</li>
+    </ul>
+    <strong>Common Google Dork Operators:</strong>
+    <ul>
+      <li><strong>site:</strong> - Search within a specific site (e.g., site:{DOMAIN})</li>
+      <li><strong>inurl:</strong> - Search for URL containing keyword (e.g., inurl:admin)</li>
+      <li><strong>filetype:</strong> - Search for specific file types (e.g., filetype:pdf)</li>
+      <li><strong>intitle:</strong> - Search in page title (e.g., intitle:"index of")</li>
+      <li><strong>intext:</strong> - Search in page content (e.g., intext:password)</li>
+      <li><strong>ext:</strong> - File extension (e.g., ext:sql)</li>
+    </ul>
+    <div class="example">
+      Examples:<br>
+      Name: Database Backups<br>
+      Dork: site:{DOMAIN} ext:sql | ext:db | ext:dump<br><br>
+      Name: Directory Listings<br>
+      Dork: site:{DOMAIN} intitle:"index of" inurl:backup<br><br>
+      Name: Exposed Credentials<br>
+      Dork: site:{DOMAIN} intext:"password" filetype:txt
+    </div>
+  </div>
+  
+  <div class="dork-list" id="dork-list"></div>
+  
+  <div class="buttons">
+    <button class="save-btn" id="save-btn">Save All</button>
+    <button class="add-btn" id="add-btn">Add New Dork</button>
+    <button class="reset-btn" id="reset-btn">Reset to Default</button>
+  </div>
+  <div class="message" id="message"></div>
+  
+  <script src="dorks.js"></script>
+</body>
+</html>
