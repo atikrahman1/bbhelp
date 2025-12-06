@@ -10,6 +10,9 @@ chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
     if (response.rescanInterval) {
       document.getElementById('rescan-interval').value = response.rescanInterval;
     }
+    if (response.falsePositiveProtection !== undefined) {
+      document.getElementById('false-positive-protection').checked = response.falsePositiveProtection;
+    }
   }
 });
 
@@ -17,8 +20,9 @@ chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
 document.getElementById('save-btn').addEventListener('click', () => {
   const textarea = document.getElementById('files-list');
   const files = textarea.value.split('\n').map(f => f.trim()).filter(f => f.length > 0);
-  const previewLen = parseInt(document.getElementById('preview-length').value) || 10;
+  const previewLen = parseInt(document.getElementById('preview-length').value) || 100;
   const rescanInt = parseInt(document.getElementById('rescan-interval').value) || 12;
+  const fpProtection = document.getElementById('false-positive-protection').checked;
   
   // Validate rescan interval
   if (rescanInt < 1 || rescanInt > 168) {
@@ -44,7 +48,17 @@ document.getElementById('save-btn').addEventListener('click', () => {
             rescanInterval: rescanInt
           }, (response3) => {
             if (response3 && response3.success) {
-              showMessage('Settings saved successfully!', 'success');
+              // Save false positive protection
+              chrome.runtime.sendMessage({
+                action: 'updateFalsePositiveProtection',
+                falsePositiveProtection: fpProtection
+              }, (response4) => {
+                if (response4 && response4.success) {
+                  showMessage('Settings saved successfully!', 'success');
+                } else {
+                  showMessage('Failed to save false positive protection', 'error');
+                }
+              });
             } else {
               showMessage('Failed to save rescan interval', 'error');
             }
@@ -88,7 +102,11 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     'phpinfo.php',
     'swagger.json',
     'website.zip',
-    'dump.sql'
+    'dump.sql',
+    '{DOMAIN}.zip',
+    'backup-{DOMAIN}.sql',
+    '{DOMAIN}-db-backup.tar.gz',
+    'robots.txt'
   ];
   
   document.getElementById('files-list').value = defaultFiles.join('\n');

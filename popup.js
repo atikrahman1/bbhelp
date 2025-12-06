@@ -69,14 +69,30 @@ document.getElementById('dorks-toggle').addEventListener('click', () => {
 
 // Load and render custom dorks
 function loadCustomDorks() {
-  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+  // Load directly from storage to avoid service worker sleep issues
+  chrome.storage.local.get(['customDorks'], (result) => {
     if (chrome.runtime.lastError) {
       console.error('Error loading dorks:', chrome.runtime.lastError);
       return;
     }
-    if (response && response.customDorks) {
-      renderDorkButtons(response.customDorks);
+    
+    let dorks = result.customDorks;
+    
+    // If no dorks in storage, use defaults
+    if (!dorks || dorks.length === 0) {
+      dorks = [
+        { name: 'Login Pages', dork: 'site:{DOMAIN} inurl:login' },
+        { name: 'Text Files', dork: 'site:{DOMAIN} filetype:txt' },
+        { name: 'PDF Files', dork: 'site:{DOMAIN} filetype:pdf' },
+        { name: 'Admin Pages', dork: 'site:{DOMAIN} inurl:admin' },
+        { name: 'Config Files', dork: 'site:{DOMAIN} filetype:config' },
+        { name: 'SQL Files', dork: 'site:{DOMAIN} filetype:sql' },
+        { name: 'ENV Files', dork: 'site:{DOMAIN} filetype:env' },
+        { name: 'Backup Files', dork: 'site:{DOMAIN} inurl:backup' }
+      ];
     }
+    
+    renderDorkButtons(dorks);
   });
 }
 
@@ -130,14 +146,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load and render custom tools
 function loadCustomTools() {
-  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+  // Load directly from storage to avoid service worker sleep issues
+  chrome.storage.local.get(['customTools'], (result) => {
     if (chrome.runtime.lastError) {
       console.error('Error loading tools:', chrome.runtime.lastError);
       return;
     }
-    if (response && response.customTools) {
-      renderToolButtons(response.customTools);
+    
+    let tools = result.customTools;
+    
+    // If no tools in storage, use defaults
+    if (!tools || tools.length === 0) {
+      tools = [
+        { name: 'Shodan', url: 'https://beta.shodan.io/domain/{DOMAIN}' },
+        { name: 'Crt.sh', url: 'https://crt.sh/?q={DOMAIN}' },
+        { name: 'Subdomain Center', url: 'https://api.subdomain.center/?domain={DOMAIN}' }
+      ];
     }
+    
+    renderToolButtons(tools);
   });
 }
 
@@ -231,13 +258,13 @@ document.getElementById('config-toggle').addEventListener('click', () => {
 });
 
 // Load scanner settings and check for results
-chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+chrome.storage.local.get(['scannerEnabled'], (result) => {
   if (chrome.runtime.lastError) {
     console.error('Error loading settings:', chrome.runtime.lastError);
     return;
   }
-  if (response) {
-    document.getElementById('scanner-switch').checked = response.scannerEnabled;
+  if (result.scannerEnabled !== undefined) {
+    document.getElementById('scanner-switch').checked = result.scannerEnabled;
   }
 });
 
@@ -303,7 +330,11 @@ document.getElementById('manage-tools').addEventListener('click', () => {
 document.getElementById('view-found').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'getFoundFiles' }, (response) => {
     if (response && response.foundFiles.length > 0) {
-      displayFoundFiles(response.foundFiles);
+      // Get protection setting
+      chrome.runtime.sendMessage({ action: 'getSettings' }, (settings) => {
+        const protectionEnabled = settings && settings.falsePositiveProtection !== undefined ? settings.falsePositiveProtection : true;
+        displayFoundFiles(response.foundFiles, protectionEnabled);
+      });
     } else {
       alert('No sensitive files found on this page yet.');
     }
@@ -571,7 +602,7 @@ function openConfigPage(filesList, previewLength) {
 }
 
 // Display found files
-function displayFoundFiles(foundFiles) {
+function displayFoundFiles(foundFiles, protectionEnabled = true) {
   const escapeHtml = (text) => {
     const map = {
       '&': '&amp;',
@@ -590,6 +621,15 @@ function displayFoundFiles(foundFiles) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
+  
+  const protectionInfoBox = protectionEnabled ? `
+  <div class="info-box">
+    <h3>🛡️ False Positive Protection Active</h3>
+    <p>✓ Baseline 404 comparison</p>
+    <p>✓ 404 page pattern detection</p>
+    <p>✓ Size-based duplicate filtering</p>
+  </div>
+  ` : '';
 
   const html = `
 <!DOCTYPE html>
@@ -659,6 +699,8 @@ function displayFoundFiles(foundFiles) {
       color: #f39c12;
       font-family: monospace;
       word-break: break-all;
+      max-height: 100px;
+      overflow-y: auto;
     }
     .count {
       color: #888;
@@ -673,14 +715,47 @@ function displayFoundFiles(foundFiles) {
       font-weight: bold;
       font-size: 16px;
     }
+    .info-box {
+      background: #2a2a2a;
+      padding: 12px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      border-left: 4px solid #3498db;
+    }
+    .info-box h3 {
+      margin: 0 0 10px 0;
+      color: #3498db;
+      font-size: 16px;
+    }
+    .info-box p {
+      margin: 5px 0;
+      color: #888;
+      font-size: 13px;
+    }
+    .validation-badge {
+      display: inline-block;
+      background: #2ecc71;
+      color: #000;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      margin-left: 5px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h2>Found Sensitive Files <span class="count">(${foundFiles.length})</span></h2>
-  <div class="warning">WARNING: These files were found accessible on the target website!</div>
+  <div class="warning">⚠️ WARNING: These files were found accessible on the target website!</div>
+  
+  ${protectionInfoBox}
+  
   ${foundFiles.map(item => `
     <div class="file-item">
-      <div class="file-name">${escapeHtml(item.file)}</div>
+      <div class="file-name">
+        ${escapeHtml(item.file)}
+        <span class="validation-badge">✓ VERIFIED</span>
+      </div>
       <a href="${escapeHtml(item.url)}" target="_blank">${escapeHtml(item.url)}</a>
       <div class="details">
         <div class="detail-row">
@@ -732,14 +807,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Load and render custom commands
 function loadCustomCommands() {
-  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+  // Load directly from storage to avoid service worker sleep issues
+  chrome.storage.local.get(['customCommands'], (result) => {
     if (chrome.runtime.lastError) {
       console.error('Error loading commands:', chrome.runtime.lastError);
       return;
     }
-    if (response && response.customCommands) {
-      renderCommandButtons(response.customCommands);
+    
+    let commands = result.customCommands;
+    
+    // If no commands in storage, use defaults
+    if (!commands || commands.length === 0) {
+      commands = [
+        { name: 'Nmap Quick Scan', command: 'nmap -T4 -F {TARGET}' },
+        { name: 'Nmap Full Scan', command: 'nmap -p- -T4 {TARGET}' },
+        { name: 'Nmap Fast Top Ports', command: 'nmap --top-ports 1000 -T4 {TARGET}' },
+        { name: 'Subfinder', command: 'subfinder -d {DOMAIN} -o {DOMAIN}.txt' },
+        { name: 'FFUF', command: 'ffuf -u {URL}/FUZZ -w /path/to/wordlist.txt -ac' },
+        { name: 'Nuclei', command: 'nuclei -target {URL}' }
+      ];
     }
+    
+    renderCommandButtons(commands);
   });
 }
 

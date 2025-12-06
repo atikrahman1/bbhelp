@@ -2,23 +2,25 @@
 
 let scannerEnabled = false;
 let sensitiveFilesList = [];
-let previewLength = 10;
+let previewLength = 100;
 let exclusionList = [];
 let customCommands = [];
 let customDorks = [];
 let customTools = [];
 let rescanInterval = 12; // hours
+let falsePositiveProtection = true; // Default: enabled
 
 // Load settings from storage
-chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval'], (result) => {
+chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection'], (result) => {
   scannerEnabled = result.scannerEnabled || false;
   sensitiveFilesList = result.sensitiveFilesList || getDefaultFilesList();
-  previewLength = result.previewLength || 10;
+  previewLength = result.previewLength || 100;
   exclusionList = result.exclusionList || [];
   customCommands = result.customCommands || getDefaultCommands();
   customDorks = result.customDorks || getDefaultDorks();
   customTools = result.customTools || getDefaultTools();
   rescanInterval = result.rescanInterval || 12;
+  falsePositiveProtection = result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true;
 });
 
 // Default sensitive files list
@@ -50,7 +52,11 @@ function getDefaultFilesList() {
     'phpinfo.php',
     'swagger.json',
     'website.zip',
-    'dump.sql'
+    'dump.sql',
+    '{DOMAIN}.zip',
+    'backup-{DOMAIN}.sql',
+    '{DOMAIN}-db-backup.tar.gz',
+    'robots.txt'
   ];
 }
 
@@ -105,8 +111,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       // Check if we need to scan (not scanned in last 12h or file list changed)
       const shouldScan = await checkIfShouldScan(domain);
       if (shouldScan) {
+        console.log(`[Scanner] Starting fresh scan for ${domain}`);
         scanForSensitiveFiles(tabId, url, domain);
       } else {
+        console.log(`[Scanner] Loading cached results for ${domain}`);
         // Load existing results and update badge
         loadExistingResults(tabId, domain);
       }
@@ -156,9 +164,22 @@ function loadExistingResults(tabId, domain) {
   chrome.storage.local.get([`scanResults_${domain}`], (result) => {
     const scanResults = result[`scanResults_${domain}`];
     if (scanResults && scanResults.length > 0) {
-      chrome.action.setBadgeText({ text: scanResults.length.toString(), tabId: tabId });
-      chrome.action.setBadgeBackgroundColor({ color: '#f39c12', tabId: tabId }); // Orange for cached
+      // Clear badge first to ensure color updates properly
+      chrome.action.setBadgeText({ text: '', tabId: tabId }, () => {
+        // Set orange badge for cached results
+        chrome.action.setBadgeBackgroundColor({ color: '#f39c12', tabId: tabId }, () => {
+          chrome.action.setBadgeText({ text: scanResults.length.toString(), tabId: tabId });
+        });
+      });
+      
+      // Store found files for this tab
       chrome.storage.local.set({ [`foundFiles_${tabId}`]: scanResults });
+      
+      console.log(`[Scanner] Loaded cached results for ${domain}: ${scanResults.length} files (ORANGE badge)`);
+    } else {
+      // No results, clear badge
+      chrome.action.setBadgeText({ text: '', tabId: tabId });
+      console.log(`[Scanner] No cached results for ${domain}`);
     }
   });
 }
@@ -174,7 +195,8 @@ function scanForSensitiveFilesWithCallback(tabId, url, domain, callback) {
     action: 'scanSensitiveFiles',
     filesList: sensitiveFilesList,
     previewLength: previewLength,
-    baseUrl: `${url.protocol}//${url.host}`
+    baseUrl: `${url.protocol}//${url.host}`,
+    falsePositiveProtection: falsePositiveProtection
   }, (response) => {
     if (chrome.runtime.lastError) {
       console.error('Error scanning:', chrome.runtime.lastError.message);
@@ -189,7 +211,8 @@ function scanForSensitiveFilesWithCallback(tabId, url, domain, callback) {
             action: 'scanSensitiveFiles',
             filesList: sensitiveFilesList,
             previewLength: previewLength,
-            baseUrl: `${url.protocol}//${url.host}`
+            baseUrl: `${url.protocol}//${url.host}`,
+            falsePositiveProtection: falsePositiveProtection
           }, (retryResponse) => {
             if (retryResponse && retryResponse.foundFiles) {
               processScanResults(tabId, domain, retryResponse.foundFiles, callback);
@@ -242,11 +265,18 @@ function processScanResults(tabId, domain, foundFiles, callback) {
 
     // Update badge and notification
     if (existingResults.length > 0) {
-      chrome.action.setBadgeText({ text: existingResults.length.toString(), tabId: tabId });
-      chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId: tabId });
+      // Clear badge first to ensure color updates properly
+      chrome.action.setBadgeText({ text: '', tabId: tabId }, () => {
+        // Set red badge for fresh scan results
+        chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId: tabId }, () => {
+          chrome.action.setBadgeText({ text: existingResults.length.toString(), tabId: tabId });
+        });
+      });
 
       // Store found files for this tab
       chrome.storage.local.set({ [`foundFiles_${tabId}`]: existingResults });
+
+      console.log(`[Scanner] Fresh scan completed for ${domain}: ${existingResults.length} files (RED badge)`);
 
       // Notify popup to update button visibility
       chrome.runtime.sendMessage({
@@ -269,6 +299,7 @@ function processScanResults(tabId, domain, foundFiles, callback) {
       }
     } else {
       chrome.action.setBadgeText({ text: '', tabId: tabId });
+      console.log(`[Scanner] Fresh scan completed for ${domain}: No files found`);
     }
     
     // Call callback with result count
@@ -314,6 +345,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     rescanInterval = request.rescanInterval;
     chrome.storage.local.set({ rescanInterval: rescanInterval });
     sendResponse({ success: true });
+  } else if (request.action === 'updateFalsePositiveProtection') {
+    falsePositiveProtection = request.falsePositiveProtection;
+    chrome.storage.local.set({ falsePositiveProtection: falsePositiveProtection });
+    sendResponse({ success: true });
   } else if (request.action === 'updateCustomDorks') {
     customDorks = request.customDorks;
     chrome.storage.local.set({ customDorks: customDorks });
@@ -331,7 +366,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       customCommands: customCommands,
       customDorks: customDorks,
       customTools: customTools,
-      rescanInterval: rescanInterval
+      rescanInterval: rescanInterval,
+      falsePositiveProtection: falsePositiveProtection
     });
   } else if (request.action === 'getFoundFiles') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

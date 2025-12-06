@@ -1,0 +1,3 @@
+# Issues - To Fix Later
+
+1. Badge color not changing from red to orange when loading cached results
