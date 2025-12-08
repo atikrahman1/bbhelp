@@ -9,9 +9,10 @@ let customDorks = [];
 let customTools = [];
 let rescanInterval = 12; // hours
 let falsePositiveProtection = true; // Default: enabled
+let showNotifications = true; // Default: enabled
 
 // Load settings from storage
-chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection'], (result) => {
+chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'showNotifications'], (result) => {
   scannerEnabled = result.scannerEnabled || false;
   sensitiveFilesList = result.sensitiveFilesList || getDefaultFilesList();
   previewLength = result.previewLength || 100;
@@ -21,6 +22,7 @@ chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength
   customTools = result.customTools || getDefaultTools();
   rescanInterval = result.rescanInterval || 12;
   falsePositiveProtection = result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true;
+  showNotifications = result.showNotifications !== undefined ? result.showNotifications : true;
 });
 
 // Default sensitive files list
@@ -287,8 +289,8 @@ function processScanResults(tabId, domain, foundFiles, callback) {
         // Popup might not be open, ignore error
       });
 
-      // Show notification only for newly found files
-      if (foundFiles.length > 0) {
+      // Show notification only for newly found files (if enabled)
+      if (foundFiles.length > 0 && showNotifications) {
         chrome.notifications.create({
           type: 'basic',
           iconUrl: 'icon48.png',
@@ -349,6 +351,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     falsePositiveProtection = request.falsePositiveProtection;
     chrome.storage.local.set({ falsePositiveProtection: falsePositiveProtection });
     sendResponse({ success: true });
+  } else if (request.action === 'updateShowNotifications') {
+    showNotifications = request.showNotifications;
+    chrome.storage.local.set({ showNotifications: showNotifications });
+    sendResponse({ success: true });
   } else if (request.action === 'updateCustomDorks') {
     customDorks = request.customDorks;
     chrome.storage.local.set({ customDorks: customDorks });
@@ -367,7 +373,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       customDorks: customDorks,
       customTools: customTools,
       rescanInterval: rescanInterval,
-      falsePositiveProtection: falsePositiveProtection
+      falsePositiveProtection: falsePositiveProtection,
+      showNotifications: showNotifications
     });
   } else if (request.action === 'getFoundFiles') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

@@ -12,6 +12,19 @@ A comprehensive Chrome extension designed for bug bounty hunters and security re
   - Crt.sh - SSL certificate transparency logs
   - Subdomain Center - Subdomain enumeration
 
+### 🔍 Service Discovery Scanner
+- **Port Scanning**: Scans top 100 most common ports on target domain
+- **HTTP/HTTPS Detection**: Identifies accessible web services
+- **Service Identification**: Recognizes common services (MySQL, MongoDB, Redis, Elasticsearch, etc.)
+- **Real-time Progress**: Live scanning progress with found services counter
+- **Export Results**: Save scan results as JSON
+- **Limitations**:
+  - Only detects HTTP/HTTPS services (not raw TCP/UDP)
+  - CORS policies may block some requests
+  - For comprehensive scanning, use tools like `nmap`
+
+**Common Ports Scanned**: 21 (FTP), 22 (SSH), 80 (HTTP), 443 (HTTPS), 3000 (Node.js), 3306 (MySQL), 5432 (PostgreSQL), 6379 (Redis), 8080 (HTTP Proxy), 8443 (HTTPS Alt), 9200 (Elasticsearch), 27017 (MongoDB), and 87 more...
+
 ### 📜 JavaScript File Extraction & Analysis
 - **Smart Extraction**: Automatically extracts custom JavaScript files from pages
 - **Intelligent Filtering**: Excludes 50+ common third-party libraries and CDN resources
@@ -163,10 +176,19 @@ Quick-copy security testing commands with variable replacement:
 2. Click the extension icon
 3. Use any of the available tools:
    - Click recon tools (Shodan, Crt.sh, etc.)
+   - Run Service Discovery to scan for open ports
    - Extract and analyze JavaScript files
    - View Google Dorks
    - Copy security testing commands
    - Check sensitive file scan results
+
+### Service Discovery Scanner
+1. Click extension icon → **Service Discovery**
+2. Target host is auto-filled from current tab (or enter manually)
+3. Click **Start Scan** to begin scanning top 100 ports
+4. View real-time progress and found services
+5. Click **Export Results** to save as JSON
+6. **Note**: Only detects HTTP/HTTPS services due to browser limitations
 
 ### Sensitive File Scanner
 1. **Enable Auto-scan**: Click extension icon → Sensitive File Scanner → Toggle "Auto-scan on page load"
@@ -190,6 +212,7 @@ Access configuration pages from the extension popup:
 - **Preview Length**: Characters to show in preview (5-500, default: 100)
 - **Rescan Interval**: Hours between rescans (1-168, default: 12)
 - **False Positive Protection**: Toggle advanced filtering on/off
+- **Show Notification Popup**: Toggle popup notifications when files are found (badge still updates)
 
 ### Exclusion List
 Add domains to skip scanning:

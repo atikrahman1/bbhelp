@@ -13,6 +13,9 @@ chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
     if (response.falsePositiveProtection !== undefined) {
       document.getElementById('false-positive-protection').checked = response.falsePositiveProtection;
     }
+    if (response.showNotifications !== undefined) {
+      document.getElementById('show-notifications').checked = response.showNotifications;
+    }
   }
 });
 
@@ -23,6 +26,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
   const previewLen = parseInt(document.getElementById('preview-length').value) || 100;
   const rescanInt = parseInt(document.getElementById('rescan-interval').value) || 12;
   const fpProtection = document.getElementById('false-positive-protection').checked;
+  const showNotifs = document.getElementById('show-notifications').checked;
   
   // Validate rescan interval
   if (rescanInt < 1 || rescanInt > 168) {
@@ -54,7 +58,17 @@ document.getElementById('save-btn').addEventListener('click', () => {
                 falsePositiveProtection: fpProtection
               }, (response4) => {
                 if (response4 && response4.success) {
-                  showMessage('Settings saved successfully!', 'success');
+                  // Save show notifications
+                  chrome.runtime.sendMessage({
+                    action: 'updateShowNotifications',
+                    showNotifications: showNotifs
+                  }, (response5) => {
+                    if (response5 && response5.success) {
+                      showMessage('Settings saved successfully!', 'success');
+                    } else {
+                      showMessage('Failed to save notification settings', 'error');
+                    }
+                  });
                 } else {
                   showMessage('Failed to save false positive protection', 'error');
                 }

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Service Discovery Scanner</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #00ff41;
+      margin: 0;
+    }
+    h2 {
+      color: #00ff41;
+      margin-bottom: 20px;
+    }
+    .info {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      color: #888;
+    }
+    .warning {
+      background: #e74c3c;
+      color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    .scan-controls {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    .input-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #00ff41;
+      font-weight: bold;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      background: #1a1a1a;
+      color: #00ff41;
+      border: 2px solid #00ff41;
+      border-radius: 3px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #fff;
+    }
+    .scan-btn {
+      background: #2ecc71;
+      flex: 1;
+    }
+    .scan-btn:hover {
+      background: #27ae60;
+    }
+    .scan-btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    .stop-btn {
+      background: #e74c3c;
+    }
+    .stop-btn:hover {
+      background: #c0392b;
+    }
+    .export-btn {
+      background: #3498db;
+    }
+    .export-btn:hover {
+      background: #2980b9;
+    }
+    .progress {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 30px;
+      background: #1a1a1a;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #2ecc71, #27ae60);
+      width: 0%;
+      transition: width 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+    }
+    .progress-text {
+      color: #888;
+      font-size: 14px;
+    }
+    .results {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 5px;
+      display: none;
+    }
+    .result-summary {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #1a1a1a;
+      border-radius: 5px;
+      border-left: 4px solid #2ecc71;
+    }
+    .result-item {
+      background: #1a1a1a;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border-left: 4px solid #2ecc71;
+    }
+    .port-number {
+      color: #2ecc71;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .service-name {
+      color: #3498db;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .status {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .status.open {
+      background: #2ecc71;
+      color: #000;
+    }
+    .status.filtered {
+      background: #f39c12;
+      color: #000;
+    }
+    .no-results {
+      text-align: center;
+      color: #888;
+      padding: 40px;
+      font-size: 16px;
+    }
+    code {
+      background: #1a1a1a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #f39c12;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h2>🔍 Service Discovery Scanner</h2>
+  
+  <div class="warning">
+    ⚠️ WARNING: Only scan systems you have permission to test. Unauthorized port scanning may be illegal.
+  </div>
+  
+  <div class="info">
+    <strong>How it works:</strong><br>
+    This scanner attempts to detect open ports by making HTTP/HTTPS requests to common ports.
+    It uses timing analysis and response detection to identify accessible services.<br><br>
+    <strong>Limitations:</strong><br>
+    • Only detects HTTP/HTTPS services (not raw TCP/UDP)<br>
+    • CORS policies may block some requests<br>
+    • Results may include false positives/negatives<br>
+    • For comprehensive scanning, use tools like <code>nmap</code>
+  </div>
+  
+  <div class="scan-controls">
+    <div class="input-group">
+      <label for="target-host">Target Host (domain or IP):</label>
+      <input type="text" id="target-host" placeholder="example.com or 192.168.1.1" value="">
+    </div>
+    
+    <div class="buttons">
+      <button class="scan-btn" id="start-scan">Start Scan</button>
+      <button class="stop-btn" id="stop-scan" style="display: none;">Stop Scan</button>
+      <button class="export-btn" id="export-results" style="display: none;">Export Results</button>
+    </div>
+  </div>
+  
+  <div class="progress" id="progress">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill">0%</div>
+    </div>
+    <div class="progress-text" id="progress-text">Initializing scan...</div>
+  </div>
+  
+  <div class="results" id="results">
+    <div class="result-summary" id="summary"></div>
+    <div id="results-list"></div>
+  </div>
+  
+  <script src="port-scanner.js"></script>
+</body>
+</html>

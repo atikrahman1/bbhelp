@@ -140,6 +140,14 @@
             background: #e67e22;
         }
 
+        #port-scanner {
+            background: #e67e22;
+        }
+
+        #port-scanner:hover {
+            background: #d35400;
+        }
+
         .dork-btn {
             background: #9b59b6;
             font-size: 12px;
@@ -281,6 +289,18 @@
         <div class="collapsible-content" id="dorks-content">
             <div class="buttons">
                 <!-- Dorks will be loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="collapsible-title" id="service-discovery-toggle">
+            <span>Service Discovery</span>
+            <span class="arrow">▶</span>
+        </div>
+        <div class="collapsible-content" id="service-discovery-content">
+            <div class="scanner-controls">
+                <button id="port-scanner" style="background: #e67e22;">Start Port Scanner</button>
             </div>
         </div>
     </div>

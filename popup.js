@@ -51,6 +51,11 @@ document.getElementById('extractjs').addEventListener('click', () => {
   });
 });
 
+// Port Scanner button
+document.getElementById('port-scanner').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'port-scanner.html' });
+});
+
 // Display JS files in a new tab
 function displayJSFiles(jsFiles) {
   // Open the viewer page with URLs as parameter
@@ -62,6 +67,15 @@ function displayJSFiles(jsFiles) {
 document.getElementById('dorks-toggle').addEventListener('click', () => {
   const toggle = document.getElementById('dorks-toggle');
   const content = document.getElementById('dorks-content');
+
+  toggle.classList.toggle('active');
+  content.classList.toggle('active');
+});
+
+// Toggle Service Discovery section
+document.getElementById('service-discovery-toggle').addEventListener('click', () => {
+  const toggle = document.getElementById('service-discovery-toggle');
+  const content = document.getElementById('service-discovery-content');
 
   toggle.classList.toggle('active');
   content.classList.toggle('active');
