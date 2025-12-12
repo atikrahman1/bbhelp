@@ -1,3 +1,7 @@
 # Issues - To Fix Later
 
 1. Badge color not changing from red to orange when loading cached results
+2. False positive protection not working in facebook - fixed
+3. HTTP Ports Checker section not expanding - Fixed duplicate event listeners - fixed
+4. All result not working properly. - fixed
+5. File structure organization - completed

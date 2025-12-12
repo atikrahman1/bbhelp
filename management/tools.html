@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Manage Copy Commands</title>
+  <title>Manage Tools</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -38,45 +38,71 @@
       font-family: monospace;
       color: #f39c12;
     }
-    .command-list {
+    .tool-table {
+      background: #2a2a2a;
+      border-radius: 5px;
+      overflow: hidden;
       margin-bottom: 20px;
     }
-    .command-item {
-      background: #2a2a2a;
-      padding: 15px;
-      margin: 10px 0;
-      border-radius: 5px;
-      border-left: 3px solid #16a085;
-    }
-    .command-item input {
+    .tool-table table {
       width: 100%;
-      padding: 8px;
-      margin: 5px 0;
+      border-collapse: collapse;
+    }
+    .tool-table th {
+      background: #333;
+      color: #00ff41;
+      padding: 12px 10px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: bold;
+      border-bottom: 2px solid #00ff41;
+    }
+    .tool-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #444;
+      vertical-align: middle;
+    }
+    .tool-table tr:hover {
+      background: #333;
+    }
+    .tool-table input {
+      width: 100%;
+      padding: 6px 8px;
       background: #1a1a1a;
       color: #00ff41;
-      border: 2px solid #00ff41;
+      border: 1px solid #555;
       border-radius: 3px;
-      font-size: 14px;
+      font-size: 13px;
       box-sizing: border-box;
     }
-    .command-item label {
-      display: block;
-      margin-top: 10px;
-      color: #888;
-      font-size: 12px;
+    .tool-table input:focus {
+      border-color: #00ff41;
+      outline: none;
     }
-    .command-item .delete-btn {
-      background: #e74c3c;
-      color: #fff;
-      border: none;
-      padding: 6px 12px;
+    .delete-btn {
+      background: #444;
+      color: #e74c3c;
+      border: 1px solid #e74c3c;
+      padding: 4px 8px;
       border-radius: 3px;
       cursor: pointer;
-      margin-top: 10px;
-      font-size: 12px;
+      font-size: 14px;
+      min-width: 50px;
+      transition: all 0.2s;
     }
-    .command-item .delete-btn:hover {
-      background: #c0392b;
+    .delete-btn:hover {
+      background: #e74c3c;
+      color: #fff;
+    }
+    .name-col {
+      width: 25%;
+    }
+    .url-col {
+      width: 60%;
+    }
+    .action-col {
+      width: 15%;
+      text-align: center;
     }
     .buttons {
       margin-top: 20px;
@@ -127,34 +153,50 @@
   </style>
 </head>
 <body>
-  <h2>Manage Copy Commands</h2>
+  <h2>Manage Tools</h2>
   <div class="info">
     <strong>Available Variables:</strong>
     <ul>
-      <li><strong>{URL}</strong> - Full URL with path and parameters (e.g., https://test.com/path?param=value)</li>
+      <li><strong>{URL}</strong> - Full URL with path and parameters</li>
       <li><strong>{DOMAIN}</strong> - Domain without www (e.g., test.com)</li>
       <li><strong>{ORIGIN}</strong> - Protocol + domain (e.g., https://test.com)</li>
-      <li><strong>{TARGET}</strong> - Domain with port if any (e.g., test.com:8080)</li>
-      <li><strong>{HOST}</strong> - Same as TARGET</li>
-      <li><strong>{PROTOCOL}</strong> - http or https</li>
-      <li><strong>{PATH}</strong> - URL path (e.g., /api/users)</li>
+      <li><strong>{TARGET}</strong> - Domain with port if any</li>
     </ul>
     <div class="example">
-      Example:<br>
-      Name: SQLMap Scan<br>
-      Command: python3 sqlmap.py -u {URL} --dbs
+      Examples:<br>
+      Name: SecurityTrails<br>
+      URL: https://securitytrails.com/domain/{DOMAIN}/dns<br><br>
+      Name: VirusTotal<br>
+      URL: https://www.virustotal.com/gui/domain/{DOMAIN}<br><br>
+      Name: URLScan<br>
+      URL: https://urlscan.io/search/#{DOMAIN}<br><br>
+      Name: Wayback Machine<br>
+      URL: https://web.archive.org/web/*/{DOMAIN}
     </div>
   </div>
   
-  <div class="command-list" id="command-list"></div>
+  <div class="tool-table">
+    <table>
+      <thead>
+        <tr>
+          <th class="name-col">🛠️ Tool Name</th>
+          <th class="url-col">🔗 URL Template</th>
+          <th class="action-col">🗑️ Action</th>
+        </tr>
+      </thead>
+      <tbody id="tool-list">
+        <!-- Tools will be loaded here -->
+      </tbody>
+    </table>
+  </div>
   
   <div class="buttons">
     <button class="save-btn" id="save-btn">Save All</button>
-    <button class="add-btn" id="add-btn">Add New Command</button>
+    <button class="add-btn" id="add-btn">Add New Tool</button>
     <button class="reset-btn" id="reset-btn">Reset to Default</button>
   </div>
   <div class="message" id="message"></div>
   
-  <script src="commands.js"></script>
+  <script src="tools.js"></script>
 </body>
 </html>

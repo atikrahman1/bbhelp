@@ -220,7 +220,7 @@ document.getElementById('export-endpoints-btn').addEventListener('click', functi
 });
 
 // Import secret scanner
-import { scanJSFiles } from './secret-scanner.js';
+import { scanJSFiles } from '../scripts/secret-scanner.js';
 
 let secrets = [];
 

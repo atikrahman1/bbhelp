@@ -1,29 +1,56 @@
 let tools = [];
 
-// Load tools on page load
-chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
-  if (response && response.customTools) {
-    tools = response.customTools;
-    renderTools();
-  }
+// Load tools when DOM is ready
+function loadTools() {
+  console.log('Loading tools...'); // Debug log
+  
+  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+    console.log('Tools response:', response); // Debug log
+    
+    if (chrome.runtime.lastError) {
+      console.error('Error loading tools:', chrome.runtime.lastError);
+      // Retry after a short delay
+      setTimeout(loadTools, 500);
+      return;
+    }
+    
+    if (response && response.customTools) {
+      tools = response.customTools;
+      renderTools();
+      console.log('Loaded', tools.length, 'tools'); // Debug log
+    } else {
+      console.warn('No tools response received, retrying...'); // Debug log
+      // Retry after a short delay
+      setTimeout(loadTools, 500);
+    }
+  });
+}
+
+// Wait for DOM to be ready
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing tools page...'); // Debug log
+  loadTools();
 });
 
 // Render tool list
 function renderTools() {
-  const container = document.getElementById('tool-list');
-  container.innerHTML = '';
+  const tbody = document.getElementById('tool-list');
+  tbody.innerHTML = '';
   
   tools.forEach((tool, index) => {
-    const item = document.createElement('div');
-    item.className = 'tool-item';
-    item.innerHTML = `
-      <label>Tool Name:</label>
-      <input type="text" class="tool-name" data-index="${index}" value="${escapeHtml(tool.name)}" placeholder="e.g., SecurityTrails">
-      <label>Tool URL (use {DOMAIN}, {URL}, etc.):</label>
-      <input type="text" class="tool-url" data-index="${index}" value="${escapeHtml(tool.url)}" placeholder="e.g., https://someapi.com/domain={DOMAIN}">
-      <button class="delete-btn" data-index="${index}">Delete</button>
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <input type="text" class="tool-name" data-index="${index}" value="${escapeHtml(tool.name)}" placeholder="e.g., SecurityTrails">
+      </td>
+      <td>
+        <input type="text" class="tool-url" data-index="${index}" value="${escapeHtml(tool.url)}" placeholder="e.g., https://someapi.com/domain={DOMAIN}">
+      </td>
+      <td style="text-align: center;">
+        <button class="delete-btn" data-index="${index}">🗑️</button>
+      </td>
     `;
-    container.appendChild(item);
+    tbody.appendChild(row);
   });
   
   // Add event listeners

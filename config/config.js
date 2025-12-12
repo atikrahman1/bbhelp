@@ -1,22 +1,63 @@
-// Load settings on page load
-chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
-  if (response) {
-    if (response.sensitiveFilesList) {
-      document.getElementById('files-list').value = response.sensitiveFilesList.join('\n');
+// Load settings when DOM is ready
+function loadSettings() {
+  console.log('Loading settings...'); // Debug log
+  
+  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+    console.log('Settings response:', response); // Debug log
+    
+    if (chrome.runtime.lastError) {
+      console.error('Error loading settings:', chrome.runtime.lastError);
+      // Retry after a short delay
+      setTimeout(loadSettings, 500);
+      return;
     }
-    if (response.previewLength) {
-      document.getElementById('preview-length').value = response.previewLength;
+    
+    if (response) {
+      if (response.sensitiveFilesList) {
+        const filesListEl = document.getElementById('files-list');
+        if (filesListEl) {
+          filesListEl.value = response.sensitiveFilesList.join('\n');
+          console.log('Loaded', response.sensitiveFilesList.length, 'files'); // Debug log
+        }
+      }
+      if (response.previewLength) {
+        const previewLengthEl = document.getElementById('preview-length');
+        if (previewLengthEl) {
+          previewLengthEl.value = response.previewLength;
+        }
+      }
+      if (response.rescanInterval) {
+        const rescanIntervalEl = document.getElementById('rescan-interval');
+        if (rescanIntervalEl) {
+          rescanIntervalEl.value = response.rescanInterval;
+        }
+      }
+      if (response.falsePositiveProtection !== undefined) {
+        const fpProtectionEl = document.getElementById('false-positive-protection');
+        if (fpProtectionEl) {
+          fpProtectionEl.checked = response.falsePositiveProtection;
+        }
+      }
+      if (response.showNotifications !== undefined) {
+        const showNotifsEl = document.getElementById('show-notifications');
+        if (showNotifsEl) {
+          showNotifsEl.checked = response.showNotifications;
+        }
+      }
+      
+      console.log('Settings loaded successfully'); // Debug log
+    } else {
+      console.warn('No settings response received, retrying...'); // Debug log
+      // Retry after a short delay
+      setTimeout(loadSettings, 500);
     }
-    if (response.rescanInterval) {
-      document.getElementById('rescan-interval').value = response.rescanInterval;
-    }
-    if (response.falsePositiveProtection !== undefined) {
-      document.getElementById('false-positive-protection').checked = response.falsePositiveProtection;
-    }
-    if (response.showNotifications !== undefined) {
-      document.getElementById('show-notifications').checked = response.showNotifications;
-    }
-  }
+  });
+}
+
+// Wait for DOM to be ready
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing config page...'); // Debug log
+  loadSettings();
 });
 
 // Save button

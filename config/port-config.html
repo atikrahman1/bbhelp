@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Configure HTTP Ports - Bug Bounty Tools</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #00ff41;
+        }
+
+        h1 {
+            margin: 0;
+            color: #00ff41;
+            font-size: 24px;
+        }
+
+        .section {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #00ff41;
+        }
+
+        .section h3 {
+            margin-top: 0;
+            color: #00ff41;
+            font-size: 18px;
+        }
+
+        .info {
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .port-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .port-item {
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .port-info {
+            flex: 1;
+        }
+
+        .port-number {
+            font-weight: bold;
+            color: #00ff41;
+        }
+
+        .port-service {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .remove-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .remove-btn:hover {
+            background: #c0392b;
+        }
+
+        .add-port-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .add-port-form input {
+            padding: 10px;
+            background: #1a1a1a;
+            border: 2px solid #555;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .add-port-form input:focus {
+            border-color: #00ff41;
+            outline: none;
+        }
+
+        .add-port-form input::placeholder {
+            color: #888;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #fff;
+        }
+
+        .btn-primary {
+            background: #00ff41;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #00cc33;
+        }
+
+        .btn-secondary {
+            background: #3498db;
+        }
+
+        .btn-secondary:hover {
+            background: #2980b9;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+
+        .message.success {
+            background: #2ecc71;
+            color: #000;
+        }
+
+        .message.error {
+            background: #e74c3c;
+            color: #fff;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .preset-btn {
+            background: #9b59b6;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .preset-btn:hover {
+            background: #8e44ad;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Configure HTTP Ports</h1>
+    </div>
+
+    <div class="section">
+        <h3>Port List Configuration</h3>
+        <div class="info">
+            Configure which ports to scan when checking for HTTP services. Add custom ports or use preset collections.
+        </div>
+
+        <div class="preset-buttons">
+            <button class="preset-btn" onclick="addPresetPorts('common')">+ Common Ports</button>
+            <button class="preset-btn" onclick="addPresetPorts('web')">+ Web Servers</button>
+            <button class="preset-btn" onclick="addPresetPorts('dev')">+ Development</button>
+            <button class="preset-btn" onclick="addPresetPorts('alt')">+ Alternative HTTP</button>
+        </div>
+
+        <div class="add-port-form">
+            <input type="number" id="port-number" placeholder="Port (e.g., 8080)" min="1" max="65535">
+            <input type="text" id="port-service" placeholder="Service name (e.g., HTTP Alt)">
+            <button class="btn btn-primary" onclick="addPort()">Add Port</button>
+        </div>
+
+        <div class="port-grid" id="port-list">
+            <!-- Ports will be loaded here -->
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-secondary" onclick="resetToDefaults()">Reset to Defaults</button>
+        <button class="btn btn-primary" onclick="savePorts()">Save Configuration</button>
+        <button class="btn btn-danger" onclick="clearAllPorts()">Clear All</button>
+    </div>
+
+    <div class="message" id="message"></div>
+
+    <script src="port-config.js"></script>
+</body>
+</html>

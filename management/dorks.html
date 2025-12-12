@@ -38,45 +38,71 @@
       font-family: monospace;
       color: #f39c12;
     }
-    .dork-list {
+    .dork-table {
+      background: #2a2a2a;
+      border-radius: 5px;
+      overflow: hidden;
       margin-bottom: 20px;
     }
-    .dork-item {
-      background: #2a2a2a;
-      padding: 15px;
-      margin: 10px 0;
-      border-radius: 5px;
-      border-left: 3px solid #9b59b6;
-    }
-    .dork-item input {
+    .dork-table table {
       width: 100%;
-      padding: 8px;
-      margin: 5px 0;
+      border-collapse: collapse;
+    }
+    .dork-table th {
+      background: #333;
+      color: #00ff41;
+      padding: 12px 10px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: bold;
+      border-bottom: 2px solid #00ff41;
+    }
+    .dork-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #444;
+      vertical-align: middle;
+    }
+    .dork-table tr:hover {
+      background: #333;
+    }
+    .dork-table input {
+      width: 100%;
+      padding: 6px 8px;
       background: #1a1a1a;
       color: #00ff41;
-      border: 2px solid #00ff41;
+      border: 1px solid #555;
       border-radius: 3px;
-      font-size: 14px;
+      font-size: 13px;
       box-sizing: border-box;
     }
-    .dork-item label {
-      display: block;
-      margin-top: 10px;
-      color: #888;
-      font-size: 12px;
+    .dork-table input:focus {
+      border-color: #00ff41;
+      outline: none;
     }
-    .dork-item .delete-btn {
-      background: #e74c3c;
-      color: #fff;
-      border: none;
-      padding: 6px 12px;
+    .delete-btn {
+      background: #444;
+      color: #e74c3c;
+      border: 1px solid #e74c3c;
+      padding: 4px 8px;
       border-radius: 3px;
       cursor: pointer;
-      margin-top: 10px;
-      font-size: 12px;
+      font-size: 14px;
+      min-width: 50px;
+      transition: all 0.2s;
     }
-    .dork-item .delete-btn:hover {
-      background: #c0392b;
+    .delete-btn:hover {
+      background: #e74c3c;
+      color: #fff;
+    }
+    .name-col {
+      width: 25%;
+    }
+    .dork-col {
+      width: 60%;
+    }
+    .action-col {
+      width: 15%;
+      text-align: center;
     }
     .buttons {
       margin-top: 20px;
@@ -153,7 +179,20 @@
     </div>
   </div>
   
-  <div class="dork-list" id="dork-list"></div>
+  <div class="dork-table">
+    <table>
+      <thead>
+        <tr>
+          <th class="name-col">🔍 Name</th>
+          <th class="dork-col">📝 Google Dork Query</th>
+          <th class="action-col">🗑️ Action</th>
+        </tr>
+      </thead>
+      <tbody id="dork-list">
+        <!-- Dorks will be loaded here -->
+      </tbody>
+    </table>
+  </div>
   
   <div class="buttons">
     <button class="save-btn" id="save-btn">Save All</button>

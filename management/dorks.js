@@ -1,29 +1,56 @@
 let dorks = [];
 
-// Load dorks on page load
-chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
-  if (response && response.customDorks) {
-    dorks = response.customDorks;
-    renderDorks();
-  }
+// Load dorks when DOM is ready
+function loadDorks() {
+  console.log('Loading dorks...'); // Debug log
+  
+  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+    console.log('Dorks response:', response); // Debug log
+    
+    if (chrome.runtime.lastError) {
+      console.error('Error loading dorks:', chrome.runtime.lastError);
+      // Retry after a short delay
+      setTimeout(loadDorks, 500);
+      return;
+    }
+    
+    if (response && response.customDorks) {
+      dorks = response.customDorks;
+      renderDorks();
+      console.log('Loaded', dorks.length, 'dorks'); // Debug log
+    } else {
+      console.warn('No dorks response received, retrying...'); // Debug log
+      // Retry after a short delay
+      setTimeout(loadDorks, 500);
+    }
+  });
+}
+
+// Wait for DOM to be ready
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing dorks page...'); // Debug log
+  loadDorks();
 });
 
 // Render dork list
 function renderDorks() {
-  const container = document.getElementById('dork-list');
-  container.innerHTML = '';
+  const tbody = document.getElementById('dork-list');
+  tbody.innerHTML = '';
   
   dorks.forEach((dork, index) => {
-    const item = document.createElement('div');
-    item.className = 'dork-item';
-    item.innerHTML = `
-      <label>Dork Name:</label>
-      <input type="text" class="dork-name" data-index="${index}" value="${escapeHtml(dork.name)}" placeholder="e.g., Database Backups">
-      <label>Google Dork Query (use {DOMAIN}):</label>
-      <input type="text" class="dork-query" data-index="${index}" value="${escapeHtml(dork.dork)}" placeholder="e.g., site:{DOMAIN} ext:sql">
-      <button class="delete-btn" data-index="${index}">Delete</button>
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <input type="text" class="dork-name" data-index="${index}" value="${escapeHtml(dork.name)}" placeholder="e.g., Database Backups">
+      </td>
+      <td>
+        <input type="text" class="dork-query" data-index="${index}" value="${escapeHtml(dork.dork)}" placeholder="e.g., site:{DOMAIN} ext:sql">
+      </td>
+      <td style="text-align: center;">
+        <button class="delete-btn" data-index="${index}">🗑️</button>
+      </td>
     `;
-    container.appendChild(item);
+    tbody.appendChild(row);
   });
   
   // Add event listeners

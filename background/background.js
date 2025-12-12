@@ -10,9 +10,11 @@ let customTools = [];
 let rescanInterval = 12; // hours
 let falsePositiveProtection = true; // Default: enabled
 let showNotifications = true; // Default: enabled
+let customPorts = []; // Custom port list for HTTP scanning
+let autoPortScan = false; // Auto port scan on page load
 
 // Load settings from storage
-chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'showNotifications'], (result) => {
+chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'showNotifications', 'customPorts', 'autoPortScan'], (result) => {
   scannerEnabled = result.scannerEnabled || false;
   sensitiveFilesList = result.sensitiveFilesList || getDefaultFilesList();
   previewLength = result.previewLength || 100;
@@ -23,7 +25,159 @@ chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength
   rescanInterval = result.rescanInterval || 12;
   falsePositiveProtection = result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true;
   showNotifications = result.showNotifications !== undefined ? result.showNotifications : true;
+  customPorts = result.customPorts || getDefaultPorts();
+  autoPortScan = result.autoPortScan || false;
+  
+  // Migrate existing scan results to new scan history format (one-time migration)
+  migrateScanResults();
 });
+
+// Migrate existing scan results to new scan history format
+function migrateScanResults() {
+  chrome.storage.local.get(null, (allItems) => {
+    const scanResults = {};
+    const scanHistories = {};
+    
+    // Find all scanResults_* and scanHistory_* entries
+    Object.keys(allItems).forEach(key => {
+      if (key.startsWith('scanResults_')) {
+        const domain = key.replace('scanResults_', '');
+        scanResults[domain] = allItems[key];
+      } else if (key.startsWith('scanHistory_')) {
+        const domain = key.replace('scanHistory_', '');
+        scanHistories[domain] = allItems[key];
+      }
+    });
+    
+    // Get existing new scan history
+    chrome.storage.local.get(['scanHistory'], (result) => {
+      let newHistory = result.scanHistory || [];
+      
+      // Convert old format to new format
+      Object.keys(scanResults).forEach(domain => {
+        const foundFiles = scanResults[domain] || [];
+        const scanInfo = scanHistories[domain];
+        
+        // Only migrate if files were found
+        if (foundFiles.length > 0) {
+          // Check if already migrated
+          const alreadyExists = newHistory.some(scan => scan.domain === domain);
+          
+          if (!alreadyExists) {
+            const scanResult = {
+              domain: domain,
+              url: `https://${domain}`,
+              timestamp: scanInfo?.lastScan || Date.now(),
+              foundFiles: foundFiles,
+              totalScanned: scanInfo?.filesList?.length || sensitiveFilesList.length,
+              protectionEnabled: falsePositiveProtection
+            };
+            
+            newHistory.push(scanResult);
+            console.log('Migrated scan result for:', domain, '- Found', foundFiles.length, 'files');
+          }
+        }
+      });
+      
+      // Save migrated history
+      if (newHistory.length > 0) {
+        chrome.storage.local.set({ scanHistory: newHistory });
+        console.log('Migration complete. Total scan history entries:', newHistory.length);
+      }
+    });
+  });
+}
+
+// Perform auto port scan
+async function performAutoPortScan(tabId, domain) {
+  try {
+    // Check if we already have recent port scan results (within 1 hour)
+    const storageKey = `portScanResults_${domain}`;
+    chrome.storage.local.get([storageKey], async (result) => {
+      const existingResults = result[storageKey];
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      
+      if (existingResults && existingResults.timestamp > oneHourAgo) {
+        console.log(`[Port Scanner] Using cached results for ${domain}`);
+        return;
+      }
+      
+      console.log(`[Port Scanner] Starting auto scan for ${domain}`);
+      
+      // Perform port scan with custom ports
+      const results = [];
+      for (const portInfo of customPorts) {
+        try {
+          const isOpen = await checkPortFromBackground(domain, portInfo.port);
+          results.push({
+            port: portInfo.port,
+            service: portInfo.service,
+            status: isOpen ? 'open' : 'closed',
+            timestamp: Date.now()
+          });
+        } catch (error) {
+          results.push({
+            port: portInfo.port,
+            service: portInfo.service,
+            status: 'timeout',
+            timestamp: Date.now()
+          });
+        }
+      }
+      
+      // Store results
+      const scanResults = {
+        domain: domain,
+        results: results,
+        timestamp: Date.now()
+      };
+      
+      chrome.storage.local.set({ [storageKey]: scanResults });
+      
+      // Count open ports
+      const openPorts = results.filter(r => r.status === 'open').length;
+      console.log(`[Port Scanner] Auto scan complete for ${domain}: ${openPorts} open ports`);
+      
+      // Send message to popup if it's open
+      chrome.runtime.sendMessage({
+        action: 'autoPortScanComplete',
+        domain: domain,
+        openPorts: openPorts,
+        results: results
+      }).catch(() => {
+        // Popup not open, ignore error
+      });
+    });
+  } catch (error) {
+    console.error('[Port Scanner] Auto scan failed:', error);
+  }
+}
+
+// Check port from background (simplified version)
+async function checkPortFromBackground(domain, port) {
+  return new Promise((resolve) => {
+    const timeout = 3000;
+    const protocol = [443, 8443, 4443, 9443].includes(port) ? 'https' : 'http';
+    const url = `${protocol}://${domain}:${port}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    fetch(url, { 
+      method: 'HEAD',
+      mode: 'no-cors',
+      signal: controller.signal
+    })
+    .then(() => {
+      clearTimeout(timeoutId);
+      resolve(true);
+    })
+    .catch(() => {
+      clearTimeout(timeoutId);
+      resolve(false);
+    });
+  });
+}
 
 // Default sensitive files list
 function getDefaultFilesList() {
@@ -93,7 +247,29 @@ function getDefaultTools() {
   return [
     { name: 'Shodan', url: 'https://beta.shodan.io/domain/{DOMAIN}' },
     { name: 'Crt.sh', url: 'https://crt.sh/?q={DOMAIN}' },
-    { name: 'Subdomain Center', url: 'https://api.subdomain.center/?domain={DOMAIN}' }
+    { name: 'Subdomain Center', url: 'https://api.subdomain.center/?domain={DOMAIN}' },
+    { name: 'Wayback Machine', url: 'https://web.archive.org/web/*/{DOMAIN}' }
+  ];
+}
+
+// Default Ports list
+function getDefaultPorts() {
+  return [
+    { port: 80, service: 'HTTP' },
+    { port: 443, service: 'HTTPS' },
+    { port: 8080, service: 'HTTP Alt' },
+    { port: 8443, service: 'HTTPS Alt' },
+    { port: 8000, service: 'HTTP Dev' },
+    { port: 8888, service: 'HTTP Alt' },
+    { port: 3000, service: 'Node.js' },
+    { port: 5000, service: 'Flask/Dev' },
+    { port: 9000, service: 'HTTP Alt' },
+    { port: 8081, service: 'HTTP Alt' },
+    { port: 8082, service: 'HTTP Alt' },
+    { port: 8090, service: 'HTTP Alt' },
+    { port: 9090, service: 'HTTP Alt' },
+    { port: 4443, service: 'HTTPS Alt' },
+    { port: 9443, service: 'HTTPS Alt' }
   ];
 }
 
@@ -119,6 +295,12 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         console.log(`[Scanner] Loading cached results for ${domain}`);
         // Load existing results and update badge
         loadExistingResults(tabId, domain);
+      }
+      
+      // Auto port scan if enabled
+      if (autoPortScan) {
+        console.log(`[Scanner] Starting auto port scan for ${domain}`);
+        performAutoPortScan(tabId, domain);
       }
     }
   }
@@ -205,7 +387,7 @@ function scanForSensitiveFilesWithCallback(tabId, url, domain, callback) {
       // Content script might not be ready, try injecting it
       chrome.scripting.executeScript({
         target: { tabId: tabId },
-        files: ['content.js']
+        files: ['content/content.js']
       }).then(() => {
         // Retry after injection
         setTimeout(() => {
@@ -257,13 +439,53 @@ function processScanResults(tabId, domain, foundFiles, callback) {
     // Store merged results
     chrome.storage.local.set({ [`scanResults_${domain}`]: existingResults });
 
-    // Update scan history
+    // Update scan history (old format)
     chrome.storage.local.set({
       [`scanHistory_${domain}`]: {
         lastScan: Date.now(),
         filesList: [...sensitiveFilesList]
       }
     });
+
+    // Store in new scan history format for "All Results" page (only if files found)
+    if (existingResults.length > 0) {
+      const scanResult = {
+        domain: domain,
+        url: `https://${domain}`, // Reconstruct URL
+        timestamp: Date.now(),
+        foundFiles: existingResults,
+        totalScanned: sensitiveFilesList.length,
+        protectionEnabled: falsePositiveProtection
+      };
+
+      // Get existing scan history and add new result
+      chrome.storage.local.get(['scanHistory'], (historyResult) => {
+        let history = historyResult.scanHistory || [];
+        
+        // Check if we already have a recent scan for this domain (within last 5 minutes)
+        const recentScanIndex = history.findIndex(scan => 
+          scan.domain === domain && 
+          (Date.now() - scan.timestamp) < 300000 // 5 minutes
+        );
+        
+        if (recentScanIndex >= 0) {
+          // Update existing recent scan
+          history[recentScanIndex] = scanResult;
+        } else {
+          // Add new scan result
+          history.push(scanResult);
+        }
+        
+        // Keep only last 100 scans
+        if (history.length > 100) {
+          history = history.slice(-100);
+        }
+        
+        // Save updated history
+        chrome.storage.local.set({ scanHistory: history });
+        console.log('Auto-scan result stored in history for:', domain, '- Found', existingResults.length, 'files'); // Debug log
+      });
+    }
 
     // Update badge and notification
     if (existingResults.length > 0) {
@@ -291,12 +513,16 @@ function processScanResults(tabId, domain, foundFiles, callback) {
 
       // Show notification only for newly found files (if enabled)
       if (foundFiles.length > 0 && showNotifications) {
-        chrome.notifications.create({
+        chrome.notifications.create('bbhelp-scan-notification', {
           type: 'basic',
-          iconUrl: 'icon48.png',
+          iconUrl: 'icons/icon48.png',
           title: 'Sensitive Files Found!',
           message: `Found ${foundFiles.length} new file(s) on ${domain} (Total: ${existingResults.length})`,
           priority: 2
+        }, (notificationId) => {
+          if (chrome.runtime.lastError) {
+            console.log('Notification failed:', chrome.runtime.lastError.message);
+          }
         });
       }
     } else {
@@ -363,6 +589,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     customTools = request.customTools;
     chrome.storage.local.set({ customTools: customTools });
     sendResponse({ success: true });
+  } else if (request.action === 'updateCustomPorts') {
+    customPorts = request.customPorts;
+    chrome.storage.local.set({ customPorts: customPorts });
+    sendResponse({ success: true });
+  } else if (request.action === 'updateAutoPortScan') {
+    autoPortScan = request.autoPortScan;
+    chrome.storage.local.set({ autoPortScan: autoPortScan });
+    sendResponse({ success: true });
   } else if (request.action === 'getSettings') {
     sendResponse({
       scannerEnabled: scannerEnabled,
@@ -374,7 +608,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       customTools: customTools,
       rescanInterval: rescanInterval,
       falsePositiveProtection: falsePositiveProtection,
-      showNotifications: showNotifications
+      showNotifications: showNotifications,
+      customPorts: customPorts,
+      autoPortScan: autoPortScan
     });
   } else if (request.action === 'getFoundFiles') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -432,6 +668,105 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     return true; // Keep channel open for async response
+  } else if (request.action === 'forceRescanWithProgress') {
+    // Manual scan with progress tracking
+    console.log('forceRescanWithProgress called for:', request.url); // Debug log
+    try {
+      const url = new URL(request.url);
+      const domain = url.host;
+
+      // Clear scan history to force rescan
+      chrome.storage.local.remove([`scanHistory_${domain}`], () => {
+        // Send scan request to content script with progress tracking
+        chrome.tabs.sendMessage(request.tabId, {
+          action: 'scanSensitiveFilesWithProgress',
+          filesList: sensitiveFilesList,
+          previewLength: previewLength,
+          baseUrl: `${url.protocol}//${url.host}`,
+          falsePositiveProtection: falsePositiveProtection
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            // Content script might not be ready, try injecting it
+            chrome.scripting.executeScript({
+              target: { tabId: request.tabId },
+              files: ['content/content.js']
+            }).then(() => {
+              // Retry after injection
+              setTimeout(() => {
+                chrome.tabs.sendMessage(request.tabId, {
+                  action: 'scanSensitiveFilesWithProgress',
+                  filesList: sensitiveFilesList,
+                  previewLength: previewLength,
+                  baseUrl: `${url.protocol}//${url.host}`,
+                  falsePositiveProtection: falsePositiveProtection
+                }, (retryResponse) => {
+                  if (retryResponse && retryResponse.foundFiles) {
+                    // Store results in the old format for compatibility
+                    processScanResults(request.tabId, domain, retryResponse.foundFiles, null);
+                    
+                    // Send response with all needed data for history storage
+                    sendResponse({ 
+                      success: true, 
+                      message: retryResponse.foundFiles.length > 0 ? 
+                        `Found ${retryResponse.foundFiles.length} sensitive file(s)!` : 
+                        'No sensitive files found.',
+                      count: retryResponse.foundFiles.length,
+                      foundFiles: retryResponse.foundFiles,
+                      totalScanned: sensitiveFilesList.length,
+                      protectionEnabled: falsePositiveProtection
+                    });
+                  } else {
+                    sendResponse({ success: false, message: 'Scan failed' });
+                  }
+                });
+              }, 500);
+            }).catch(err => {
+              sendResponse({ success: false, message: 'Failed to inject content script: ' + err.message });
+            });
+            return;
+          }
+
+          if (response && response.foundFiles) {
+            // Store results in the old format for compatibility
+            processScanResults(request.tabId, domain, response.foundFiles, null);
+            
+            // Send response with all needed data for history storage
+            sendResponse({ 
+              success: true, 
+              message: response.foundFiles.length > 0 ? 
+                `Found ${response.foundFiles.length} sensitive file(s)!` : 
+                'No sensitive files found.',
+              count: response.foundFiles.length,
+              foundFiles: response.foundFiles,
+              totalScanned: sensitiveFilesList.length,
+              protectionEnabled: falsePositiveProtection
+            });
+          } else {
+            sendResponse({ success: false, message: 'Scan failed' });
+          }
+        });
+      });
+    } catch (error) {
+      sendResponse({ success: false, message: 'Invalid URL: ' + error.message });
+    }
+
+    return true; // Keep channel open for async response
+  } else if (request.action === 'reloadSettings') {
+    // Reload all settings from storage after import
+    chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection'], (result) => {
+      scannerEnabled = result.scannerEnabled || false;
+      sensitiveFilesList = result.sensitiveFilesList || getDefaultFilesList();
+      previewLength = result.previewLength || 100;
+      exclusionList = result.exclusionList || [];
+      customCommands = result.customCommands || getDefaultCommands();
+      customDorks = result.customDorks || getDefaultDorks();
+      customTools = result.customTools || getDefaultTools();
+      rescanInterval = result.rescanInterval || 12;
+      falsePositiveProtection = result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true;
+      
+      sendResponse({ success: true });
+    });
+    return true;
   }
 
   return true;

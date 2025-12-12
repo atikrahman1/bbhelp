@@ -1,278 +1,177 @@
-# Bug Bounty Hunter Tools - Chrome Extension
+# BBHelp - Chrome Extension
 
-A comprehensive Chrome extension designed for bug bounty hunters and security researchers. Provides automated reconnaissance, JavaScript analysis, secret detection, and sensitive file discovery with advanced false positive filtering.
+A comprehensive Chrome extension for bug bounty hunters and security researchers. Automates reconnaissance, JavaScript analysis, secret detection, and sensitive file discovery with smart filtering.
 
-## 🚀 Features
+## 🚀 Key Features
 
-### 🔧 Customizable Recon Tools
-- **Fully Configurable**: Add, edit, or remove reconnaissance tools
-- **Variable Support**: Use `{DOMAIN}`, `{URL}`, `{HOST}`, `{PROTOCOL}`, `{ORIGIN}` in tool URLs
-- **Default Tools Included**:
-  - Shodan - Domain intelligence and exposed services
-  - Crt.sh - SSL certificate transparency logs
-  - Subdomain Center - Subdomain enumeration
+### 🔧 Recon Tools
+- **Customizable Tools**: Add/edit reconnaissance tools with variable support
+- **Quick Access**: One-click access to Shodan, Crt.sh, Subdomain Center
+- **Variable Support**: `{DOMAIN}`, `{URL}`, `{HOST}`, `{PROTOCOL}`, `{ORIGIN}`
 
-### 🔍 Service Discovery Scanner
-- **Port Scanning**: Scans top 100 most common ports on target domain
-- **HTTP/HTTPS Detection**: Identifies accessible web services
-- **Service Identification**: Recognizes common services (MySQL, MongoDB, Redis, Elasticsearch, etc.)
-- **Real-time Progress**: Live scanning progress with found services counter
-- **Export Results**: Save scan results as JSON
-- **Limitations**:
-  - Only detects HTTP/HTTPS services (not raw TCP/UDP)
-  - CORS policies may block some requests
-  - For comprehensive scanning, use tools like `nmap`
+### 🌐 HTTP Ports Checker
+- **Customizable Port Lists**: Configure your own ports or use presets (Common, Web, Dev, Alt)
+- **Auto-Scan**: Automatically scan ports when visiting new domains
+- **Smart Timeouts**: Dynamic timeouts based on file size (3s to 30s)
+- **Results Dropdown**: View scan results with clickable links to open services
+- **Background Scanning**: Non-blocking scans with progress tracking
 
-**Common Ports Scanned**: 21 (FTP), 22 (SSH), 80 (HTTP), 443 (HTTPS), 3000 (Node.js), 3306 (MySQL), 5432 (PostgreSQL), 6379 (Redis), 8080 (HTTP Proxy), 8443 (HTTPS Alt), 9200 (Elasticsearch), 27017 (MongoDB), and 87 more...
-
-### 📜 JavaScript File Extraction & Analysis
-- **Smart Extraction**: Automatically extracts custom JavaScript files from pages
-- **Intelligent Filtering**: Excludes 50+ common third-party libraries and CDN resources
-  - Analytics (Google Analytics, Mixpanel, Segment, etc.)
-  - Social widgets (Facebook, Twitter, LinkedIn, etc.)
-  - Common libraries (jQuery, Bootstrap, React, Vue, etc.)
-  - Ad networks and chat widgets
+### 📜 JavaScript Analysis
+- **Smart Extraction**: Filters out 50+ common libraries (jQuery, React, Analytics, etc.)
 - **Three Analysis Modes**:
-  1. **JS Files Viewer**: List and copy all extracted JavaScript URLs
-  2. **Endpoint Discovery**: Find API endpoints with confidence scoring
-  3. **Secret Scanner**: Detect exposed credentials and API keys
+  - **JS Files Viewer**: Extract and copy JavaScript URLs
+  - **Endpoint Discovery**: Find API endpoints with confidence scoring
+  - **Secret Scanner**: Detect 30+ types of exposed credentials
 
-### 🔍 Endpoint Discovery
-- **Pattern-Based Detection**: Uses 8+ regex patterns to find endpoints
-- **HTTP Method Detection**: Identifies GET, POST, PUT, DELETE, PATCH methods
-- **Confidence Scoring**: Rates findings from 30-100% confidence
-- **Detects**:
-  - `/api/*` paths
-  - Versioned endpoints (`/v1/`, `/v2/`)
-  - GraphQL endpoints
-  - REST API patterns
-  - Fetch/Axios calls
-  - Template literals with URLs
-- **Export**: Save results as JSON
+### 🔐 Secret Detection
+- **API Keys**: Google, AWS, GitHub, Stripe, Twilio, Slack, etc.
+- **Tokens**: JWT, OAuth, Authorization headers
+- **Crypto Keys**: RSA, SSH, DSA, EC private keys
+- **Advanced Filtering**: Shannon entropy analysis, context-aware filtering
+- **Smart Scoring**: 60-100% confidence ratings
 
-### 🔐 Secret Scanner
-Detects 30+ types of secrets with advanced filtering:
+### 🎯 Sensitive File Scanner
+- **30+ Default Files**: `.env`, `config.php`, `.git/config`, `backup.sql`, `phpinfo.php`, etc.
+- **Variable Support**: `{DOMAIN}.zip`, `backup-{DOMAIN}.sql`
+- **Smart Timeouts**: 3s-30s based on file size, partial download for large files
+- **Auto-Scan**: Configurable scanning on page load
+- **Progress Tracking**: Real-time scanning progress with file-by-file updates
 
-**API Keys & Tokens**:
-- Google API Keys, Firebase, OAuth tokens
-- AWS Access Keys, Secret Keys, S3 URLs
-- GitHub tokens and access credentials
-- Stripe API keys (live and restricted)
-- Twilio API keys and SIDs
-- Slack, Mailgun, Square tokens
-- PayPal Braintree tokens
+⚠️ **Warning**: Auto-scanning with large file lists can be very noisy and may get you blocked by target websites. The sensitive file fuzzer is designed to scan only small, targeted lists of files.
 
-**Authentication**:
-- JWT tokens with validation
-- Authorization headers (Basic, Bearer, API Key)
-- OAuth access tokens
+#### 🛡️ Advanced False Positive Protection
+- **Baseline 404 Comparison**: Detects catch-all responses
+- **Size Range Clustering**: Groups similar-sized responses (±10%)
+- **HTML Structure Detection**: Identifies identical page structures
+- **Content Similarity**: Filters duplicate content patterns
 
-**Cryptographic Keys**:
-- RSA, SSH, DSA, EC private keys
-- PGP private key blocks
+### 🔍 Google Dorks & 📋 Copy Commands
+- **8 Default Dorks**: Login pages, admin panels, config files, backups
+- **6 Default Commands**: Nmap, Subfinder, FFUF, Nuclei
+- **Fully Customizable**: Add/edit/remove via management pages
+- **Variable Support**: `{DOMAIN}`, `{URL}`, `{TARGET}`, `{HOST}`, `{PROTOCOL}`
 
-**Other**:
-- Bitcoin addresses
-- Instagram, Twitter, Facebook tokens
-
-**Advanced Features**:
-- **Shannon Entropy Analysis**: Identifies high-randomness strings
-- **Context-Aware Filtering**: Excludes minified code, webpack hashes, base64 images
-- **Confidence Scoring**: 60-100% confidence ratings
-- **Smart Pattern Matching**: Reduces false positives from source maps and build artifacts
-- **Export**: Save findings as JSON
-
-### 🎯 Sensitive File Fuzzer
-Automatically discovers exposed sensitive files with intelligent false positive reduction.
-
-**Default File List** (30+ files):
-- Environment files (`.env`, `.env.local`, `.env.production`, `.env.backup`)
-- Configuration files (`config.php`, `config.yaml`)
-- Git files (`.git/config`, `.git/HEAD`, `.gitignore`)
-- Backup files (`backup.zip`, `backup.sql`, `website.zip`)
-- Database dumps (`db.sql`, `database.sql`, `dump.sql`)
-- Log files (`debug.log`, `error.log`, `laravel.log`, `npm-debug.log`)
-- Lock files (`composer.lock`, `yarn.lock`, `package-lock.json`)
-- Other sensitive files (`phpinfo.php`, `swagger.json`, `robots.txt`)
-
-**Variable Support**:
-- `{DOMAIN}.zip` → `example.com.zip`
-- `backup-{DOMAIN}.sql` → `backup-example.com.sql`
-- `{DOMAIN}-db-backup.tar.gz` → `example.com-db-backup.tar.gz`
-
-**Smart Features**:
-- **Auto-scan**: Scans on page load (configurable)
-- **Rescan Interval**: Configurable (1-168 hours, default: 12h)
-- **Domain Exclusion**: Skip scanning for specific domains
-- **Badge Notifications**: 
-  - 🔴 Red badge = Fresh scan results
-  - 🟠 Orange badge = Cached results
-- **Persistent Storage**: Results saved per domain
-- **Preview**: Shows first 100 characters of file content
-
-#### 🛡️ False Positive Protection (Toggleable)
-
-Advanced multi-layer filtering to reduce false positives:
-
-1. **Baseline 404 Comparison**: Requests a random non-existent file first to identify catch-all responses
-2. **404 Pattern Detection**: Identifies common "not found" indicators in HTML content
-3. **Size-Based Filtering**: Flags when 5+ files return identical sizes
-4. **Minimum Size Check**: Filters responses < 10 bytes
-
-**Toggle Protection**: Enable/disable in Fuzzer Configuration based on your needs
-- **ON**: Aggressive filtering, fewer false positives (recommended)
-- **OFF**: Shows all HTTP 200 responses (useful for debugging)
-
-### 🔎 Google Dorks
-Pre-configured and customizable Google dork queries:
-
-**Default Dorks**:
-- Login Pages: `site:{DOMAIN} inurl:login`
-- Admin Pages: `site:{DOMAIN} inurl:admin`
-- Config Files: `site:{DOMAIN} filetype:config`
-- SQL Files: `site:{DOMAIN} filetype:sql`
-- ENV Files: `site:{DOMAIN} filetype:env`
-- Backup Files: `site:{DOMAIN} inurl:backup`
-- Text Files: `site:{DOMAIN} filetype:txt`
-- PDF Files: `site:{DOMAIN} filetype:pdf`
-
-**Fully Customizable**: Add, edit, or remove dorks via configuration
-
-### 📋 Copy Commands
-Quick-copy security testing commands with variable replacement:
-
-**Default Commands**:
-- Nmap Quick Scan: `nmap -T4 -F {TARGET}`
-- Nmap Full Scan: `nmap -p- -T4 {TARGET}`
-- Subfinder: `subfinder -d {DOMAIN} -o {DOMAIN}.txt`
-- FFUF: `ffuf -u {URL}/FUZZ -w /path/to/wordlist.txt -ac`
-- Nuclei: `nuclei -target {URL}`
-
-**Variable Support**: `{URL}`, `{DOMAIN}`, `{TARGET}`, `{HOST}`, `{PROTOCOL}`, `{PATH}`
+### 📊 Scan History & Results
+- **All Results Page**: Centralized view of all scan results across domains
+- **Search & Filter**: Find specific domains or file types
+- **Table View**: Quick overview with file counts and timestamps
+- **Detailed View**: Click domains to see full file details with metadata
+- **Export/Import**: Backup and restore all configurations
+- **Smart Storage**: Only stores scans that found files
 
 ## 📦 Installation
 
-### From Source
-1. Clone this repository:
+1. **Clone Repository**:
    ```bash
    git clone https://github.com/atikrahman1/bbhelp.git
-   cd bbhelp
    ```
 
-2. Open Chrome and navigate to `chrome://extensions/`
+2. **Load in Chrome**:
+   - Open `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked"
+   - Select the `bbhelp` folder
 
-3. Enable "Developer mode" (toggle in top right)
+## 🎮 Quick Start
 
-4. Click "Load unpacked"
+1. **Visit any website** → Extension auto-scans (if enabled)
+2. **Click extension icon** → Access all tools
+3. **Configure settings** → Customize scanning behavior
+4. **View results** → Check "All Results" for scan history
 
-5. Select the `bbhelp` folder
+### Key Actions
+- **🔍 Scan HTTP Ports** → Check for open services
+- **📜 Extract JS Files** → Analyze JavaScript for secrets/endpoints  
+- **🎯 Scan Sensitive Files** → Find exposed configuration files
+- **📊 All Results** → View scan history across all domains
+- **⚙️ Configuration** → Customize tools, ports, file lists
 
-6. The extension icon will appear in your toolbar
+## ⚙️ Configuration
 
-## 🎮 Usage
+### Port Scanner
+- **Configure Ports**: Add custom ports or use presets
+- **Auto-Scan**: Toggle automatic scanning on page load
+- **Results**: View open ports with clickable links
 
-### Basic Usage
-1. Navigate to any website
-2. Click the extension icon
-3. Use any of the available tools:
-   - Click recon tools (Shodan, Crt.sh, etc.)
-   - Run Service Discovery to scan for open ports
-   - Extract and analyze JavaScript files
-   - View Google Dorks
-   - Copy security testing commands
-   - Check sensitive file scan results
+### File Scanner  
+- **File List**: Customize sensitive files to check
+- **Auto-Scan**: Enable/disable automatic scanning
+- **False Positive Protection**: Smart filtering (recommended: ON)
+- **Exclusions**: Skip specific domains
 
-### Service Discovery Scanner
-1. Click extension icon → **Service Discovery**
-2. Target host is auto-filled from current tab (or enter manually)
-3. Click **Start Scan** to begin scanning top 100 ports
-4. View real-time progress and found services
-5. Click **Export Results** to save as JSON
-6. **Note**: Only detects HTTP/HTTPS services due to browser limitations
+### Variables
+Use in tools, commands, and file paths:
+- `{DOMAIN}` → `example.com`
+- `{URL}` → `https://example.com/path`
+- `{HOST}` → `www.example.com`
 
-### Sensitive File Scanner
-1. **Enable Auto-scan**: Click extension icon → Sensitive File Scanner → Toggle "Auto-scan on page load"
-2. **Manual Scan**: Click "Scan" button to force immediate scan
-3. **View Results**: Click "View Found Files" to see detailed results
-4. **Configure**: Click "Fuzzer Configuration" to customize file list and settings
+### Import/Export Configuration
+Backup and restore all extension settings in JSON format.
 
-### Configuration
-Access configuration pages from the extension popup:
+**How it works**:
+- **Export**: Downloads complete configuration as JSON file
+- **Import**: Upload JSON file to restore all settings
+- **Includes**: Tools, dorks, commands, file lists, exclusions, scanner settings
 
-- **Fuzzer Configuration**: Customize sensitive file list, preview length, rescan interval, false positive protection
-- **Manage Exclusion List**: Add domains to skip scanning (supports wildcards)
-- **Manage Copy Commands**: Add/edit quick-copy commands
-- **Manage Google Dorks**: Add/edit Google dork queries
-- **Manage Tools**: Add/edit reconnaissance tools
-
-## ⚙️ Configuration Options
-
-### Fuzzer Configuration
-- **File List**: One file path per line, supports `{DOMAIN}` variables
-- **Preview Length**: Characters to show in preview (5-500, default: 100)
-- **Rescan Interval**: Hours between rescans (1-168, default: 12)
-- **False Positive Protection**: Toggle advanced filtering on/off
-- **Show Notification Popup**: Toggle popup notifications when files are found (badge still updates)
-
-### Exclusion List
-Add domains to skip scanning:
-- `example.com` - Exact match
-- `*.example.com` - Wildcard subdomain match
-- `test-*.com` - Wildcard pattern match
-
-### Variable Support
-Use these variables in file paths, tools, commands, and dorks:
-- `{DOMAIN}` - Domain without www (e.g., `example.com`)
-- `{HOST}` - Full hostname (e.g., `www.example.com`)
-- `{URL}` - Full URL (e.g., `https://example.com`)
-- `{PROTOCOL}` - http or https
-- `{ORIGIN}` - Protocol + host (e.g., `https://example.com`)
-- `{TARGET}` - Same as HOST
-- `{PATH}` - URL path
-
-## 🔧 Technical Details
-
-### Architecture
-- **Manifest V3**: Modern Chrome extension architecture
-- **Service Worker**: Background processing for file scanning
-- **Content Script**: Injected into pages for JS extraction and file scanning
-- **Storage API**: Persistent storage for settings and results
-- **Badge API**: Visual notifications for scan results
-
-### File Structure
-```
-bbhelp/
-├── manifest.json           # Extension configuration
-├── popup.html/js          # Main popup interface
-├── background.js          # Service worker for scanning
-├── content.js             # Content script for page interaction
-├── js-viewer.html/js      # JavaScript file viewer
-├── endpoint-extractor.js  # Endpoint discovery logic
-├── secret-scanner.js      # Secret detection logic
-├── config.html/js         # Fuzzer configuration
-├── exclusions.html/js     # Domain exclusion management
-├── commands.html/js       # Command management
-├── dorks.html/js          # Google Dorks management
-├── tools.html/js          # Tools management
-└── icons/                 # Extension icons
+**Example Configuration**:
+```json
+{
+  "metadata": {
+    "exportedAt": "2024-12-12T10:30:00.000Z",
+    "version": "1.0",
+    "extensionName": "BBHelp"
+  },
+  "settings": {
+    "scannerEnabled": true,
+    "sensitiveFilesList": [
+      ".env",
+      "config.php",
+      "backup.sql",
+      "{DOMAIN}.zip"
+    ],
+    "customTools": [
+      {
+        "name": "Shodan",
+        "url": "https://beta.shodan.io/domain/{DOMAIN}"
+      },
+      {
+        "name": "Custom Tool",
+        "url": "https://example.com/search?q={DOMAIN}"
+      }
+    ],
+    "customDorks": [
+      {
+        "name": "Login Pages",
+        "dork": "site:{DOMAIN} inurl:login"
+      }
+    ],
+    "exclusionList": ["*.google.com", "localhost"],
+    "falsePositiveProtection": true,
+    "rescanInterval": 12
+  }
+}
 ```
 
-## 🐛 Known Issues
 
-See `issues.txt` for current known issues and planned improvements.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📝 License
-
-This project is open source and available for educational and research purposes.
 
 ## ⚠️ Disclaimer
 
-This tool is designed for security research and bug bounty hunting on systems you have permission to test. Always obtain proper authorization before testing any system. The authors are not responsible for misuse or damage caused by this tool.
+For authorized security testing only. Always obtain permission before testing any system.
+
+## 🤝 Contributing
+
+Pull requests welcome! Please create a pull request for any improvements or bug fixes.
+
+## ⭐ Support
+
+If you like this project, please give it a star! ⭐
+
+## 📞 Contact
+
+For suggestions and improvements, contact me via:
+- **X (Twitter)**: [@X7Rahman](https://x.com/X7Rahman)
+- **LinkedIn**: [Atikqur Rahman](https://www.linkedin.com/in/atikqur-rahman/)
 
 ## 🙏 Credits
 
-Created for the bug bounty and security research community.
+- **Endpoint & Secret Detection**: Inspired by [rep](https://github.com/repplus/rep) - Thanks for the innovative approach to JavaScript analysis!

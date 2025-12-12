@@ -1,29 +1,56 @@
 let commands = [];
 
-// Load commands on page load
-chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
-  if (response && response.customCommands) {
-    commands = response.customCommands;
-    renderCommands();
-  }
+// Load commands when DOM is ready
+function loadCommands() {
+  console.log('Loading commands...'); // Debug log
+  
+  chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
+    console.log('Commands response:', response); // Debug log
+    
+    if (chrome.runtime.lastError) {
+      console.error('Error loading commands:', chrome.runtime.lastError);
+      // Retry after a short delay
+      setTimeout(loadCommands, 500);
+      return;
+    }
+    
+    if (response && response.customCommands) {
+      commands = response.customCommands;
+      renderCommands();
+      console.log('Loaded', commands.length, 'commands'); // Debug log
+    } else {
+      console.warn('No commands response received, retrying...'); // Debug log
+      // Retry after a short delay
+      setTimeout(loadCommands, 500);
+    }
+  });
+}
+
+// Wait for DOM to be ready
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, initializing commands page...'); // Debug log
+  loadCommands();
 });
 
 // Render command list
 function renderCommands() {
-  const container = document.getElementById('command-list');
-  container.innerHTML = '';
+  const tbody = document.getElementById('command-list');
+  tbody.innerHTML = '';
   
   commands.forEach((cmd, index) => {
-    const item = document.createElement('div');
-    item.className = 'command-item';
-    item.innerHTML = `
-      <label>Command Name:</label>
-      <input type="text" class="cmd-name" data-index="${index}" value="${escapeHtml(cmd.name)}" placeholder="e.g., SQLMap Scan">
-      <label>Command (use {URL}, {DOMAIN}, etc.):</label>
-      <input type="text" class="cmd-command" data-index="${index}" value="${escapeHtml(cmd.command)}" placeholder="e.g., python3 sqlmap.py -u {URL} --dbs">
-      <button class="delete-btn" data-index="${index}">Delete</button>
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <input type="text" class="cmd-name" data-index="${index}" value="${escapeHtml(cmd.name)}" placeholder="e.g., SQLMap Scan">
+      </td>
+      <td>
+        <input type="text" class="cmd-command" data-index="${index}" value="${escapeHtml(cmd.command)}" placeholder="e.g., python3 sqlmap.py -u {URL} --dbs">
+      </td>
+      <td style="text-align: center;">
+        <button class="delete-btn" data-index="${index}">🗑️</button>
+      </td>
     `;
-    container.appendChild(item);
+    tbody.appendChild(row);
   });
   
   // Add event listeners
