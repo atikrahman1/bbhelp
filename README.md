@@ -2,9 +2,14 @@
 
 A comprehensive Chrome extension for bug bounty hunters and security researchers. Automates reconnaissance, JavaScript analysis, secret detection, and sensitive file discovery with smart filtering.
 
+<img width="1906" height="974" alt="bbhelp-1" src="https://github.com/user-attachments/assets/c02116e3-1f46-4299-930f-eadf1d4a11d5" />
+
 ## 🚀 Key Features
 
 ### 🔧 Recon Tools
+
+<img width="1233" height="903" alt="bbhelp-6" src="https://github.com/user-attachments/assets/f78a8499-2ffd-47a7-b5e3-39bc08baf5d0" />
+
 - **Customizable Tools**: Add/edit reconnaissance tools with variable support
 - **Quick Access**: One-click access to Shodan, Crt.sh, Subdomain Center
 - **Variable Support**: `{DOMAIN}`, `{URL}`, `{HOST}`, `{PROTOCOL}`, `{ORIGIN}`
@@ -17,6 +22,9 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 - **Background Scanning**: Non-blocking scans with progress tracking
 
 ### 📜 JavaScript Analysis
+<img width="1897" height="973" alt="bbhelp-3" src="https://github.com/user-attachments/assets/81eb31a8-e2b3-4fba-8241-053be04f164a" />
+
+
 - **Smart Extraction**: Filters out 50+ common libraries (jQuery, React, Analytics, etc.)
 - **Three Analysis Modes**:
   - **JS Files Viewer**: Extract and copy JavaScript URLs
@@ -31,6 +39,11 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 - **Smart Scoring**: 60-100% confidence ratings
 
 ### 🎯 Sensitive File Scanner
+<img width="1902" height="976" alt="bbhelp-5" src="https://github.com/user-attachments/assets/bf016a7a-4ea3-4dfe-b245-e03bc1cfd3c3" />
+
+<img width="1898" height="970" alt="bbhelp-7" src="https://github.com/user-attachments/assets/f2fae31c-7250-4609-ab04-47e7780f51d1" />
+
+
 - **30+ Default Files**: `.env`, `config.php`, `.git/config`, `backup.sql`, `phpinfo.php`, etc.
 - **Variable Support**: `{DOMAIN}.zip`, `backup-{DOMAIN}.sql`
 - **Smart Timeouts**: 3s-30s based on file size, partial download for large files
@@ -52,6 +65,8 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 - **Variable Support**: `{DOMAIN}`, `{URL}`, `{TARGET}`, `{HOST}`, `{PROTOCOL}`
 
 ### 📊 Scan History & Results
+<img width="1911" height="692" alt="bbhelp-2" src="https://github.com/user-attachments/assets/b20e08bb-75fd-4d97-a62e-f1c28241c5e0" />
+
 - **All Results Page**: Centralized view of all scan results across domains
 - **Search & Filter**: Find specific domains or file types
 - **Table View**: Quick overview with file counts and timestamps
@@ -175,3 +190,4 @@ For suggestions and improvements, contact me via:
 ## 🙏 Credits
 
 - **Endpoint & Secret Detection**: Inspired by [rep](https://github.com/repplus/rep) - Thanks for the innovative approach to JavaScript analysis!
+
