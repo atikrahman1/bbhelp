@@ -179,7 +179,11 @@ Pull requests welcome! Please create a pull request for any improvements or bug 
 
 ## ⭐ Support
 
-If you like this project, please give it a star! ⭐
+If BBHelp has been helpful in your security research:
+
+⭐ **Star this repo** | 🍴 **Share with others** | [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](http://paypal.me/atikqur)
+
+Your support keeps BBHelp growing! 🚀
 
 ## 📞 Contact
 
@@ -190,4 +194,5 @@ For suggestions and improvements, contact me via:
 ## 🙏 Credits
 
 - **Endpoint & Secret Detection**: Inspired by [rep](https://github.com/repplus/rep) - Thanks for the innovative approach to JavaScript analysis!
+
 
