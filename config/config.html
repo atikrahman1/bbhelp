@@ -146,6 +146,33 @@
     </p>
   </div>
   
+  <div class="info" style="margin-top: 20px;">
+    <label for="scan-engine" style="display: block; margin-bottom: 5px;">Scan Engine:</label>
+    <select id="scan-engine" style="padding: 8px; background: #1a1a1a; color: #00ff41; border: 2px solid #00ff41; border-radius: 3px; font-size: 14px;">
+      <option value="sequential">Sequential (one at a time)</option>
+      <option value="parallel">Parallel (batch requests)</option>
+    </select>
+    <p style="color: #888; font-size: 12px; margin-top: 10px;">
+      <strong>Sequential:</strong> Scans files one by one. Slower but stealthier, less likely to trigger WAF.<br>
+      <strong>Parallel:</strong> Scans multiple files at once in batches. Much faster but more aggressive.
+    </p>
+  </div>
+  
+  <div class="info" style="margin-top: 20px;" id="concurrency-section">
+    <label for="parallel-concurrency" style="display: block; margin-bottom: 5px;">Parallel Concurrency:</label>
+    <input type="number" id="parallel-concurrency" min="2" max="20" value="5">
+    <p style="color: #888; font-size: 12px; margin-top: 5px;">Number of simultaneous requests when using parallel engine (2-20)</p>
+  </div>
+  
+  <div class="info" style="margin-top: 20px;">
+    <label for="request-delay" style="display: block; margin-bottom: 5px;">Request Delay (ms):</label>
+    <input type="number" id="request-delay" min="0" max="5000" value="100" step="50">
+    <p style="color: #888; font-size: 12px; margin-top: 5px;">
+      Delay between requests in milliseconds (0-5000). Acts as rate limiting to avoid WAF/IP bans.<br>
+      <strong>0ms</strong> = No delay (fastest, risky) | <strong>100ms</strong> = Default | <strong>500-2000ms</strong> = Stealth mode
+    </p>
+  </div>
+  
   <div class="buttons">
     <button class="save-btn" id="save-btn">Save</button>
     <button class="reset-btn" id="reset-btn">Reset to Default</button>

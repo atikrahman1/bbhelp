@@ -44,6 +44,25 @@ function loadSettings() {
           showNotifsEl.checked = response.showNotifications;
         }
       }
+      if (response.scanEngine) {
+        const scanEngineEl = document.getElementById('scan-engine');
+        if (scanEngineEl) {
+          scanEngineEl.value = response.scanEngine;
+          toggleConcurrencyVisibility(response.scanEngine);
+        }
+      }
+      if (response.requestDelay !== undefined) {
+        const requestDelayEl = document.getElementById('request-delay');
+        if (requestDelayEl) {
+          requestDelayEl.value = response.requestDelay;
+        }
+      }
+      if (response.parallelConcurrency) {
+        const concurrencyEl = document.getElementById('parallel-concurrency');
+        if (concurrencyEl) {
+          concurrencyEl.value = response.parallelConcurrency;
+        }
+      }
       
       console.log('Settings loaded successfully'); // Debug log
     } else {
@@ -54,10 +73,26 @@ function loadSettings() {
   });
 }
 
+// Show/hide concurrency section based on scan engine
+function toggleConcurrencyVisibility(engine) {
+  const section = document.getElementById('concurrency-section');
+  if (section) {
+    section.style.display = engine === 'parallel' ? 'block' : 'none';
+  }
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, initializing config page...'); // Debug log
   loadSettings();
+  
+  // Toggle concurrency visibility when engine changes
+  const scanEngineEl = document.getElementById('scan-engine');
+  if (scanEngineEl) {
+    scanEngineEl.addEventListener('change', (e) => {
+      toggleConcurrencyVisibility(e.target.value);
+    });
+  }
 });
 
 // Save button
@@ -68,10 +103,25 @@ document.getElementById('save-btn').addEventListener('click', () => {
   const rescanInt = parseInt(document.getElementById('rescan-interval').value) || 12;
   const fpProtection = document.getElementById('false-positive-protection').checked;
   const showNotifs = document.getElementById('show-notifications').checked;
+  const scanEng = document.getElementById('scan-engine').value;
+  const reqDelay = parseInt(document.getElementById('request-delay').value) || 100;
+  const parConcurrency = parseInt(document.getElementById('parallel-concurrency').value) || 5;
   
   // Validate rescan interval
   if (rescanInt < 1 || rescanInt > 168) {
     showMessage('Rescan interval must be between 1 and 168 hours', 'error');
+    return;
+  }
+  
+  // Validate request delay
+  if (reqDelay < 0 || reqDelay > 5000) {
+    showMessage('Request delay must be between 0 and 5000 ms', 'error');
+    return;
+  }
+  
+  // Validate concurrency
+  if (parConcurrency < 2 || parConcurrency > 20) {
+    showMessage('Parallel concurrency must be between 2 and 20', 'error');
     return;
   }
   
@@ -105,7 +155,37 @@ document.getElementById('save-btn').addEventListener('click', () => {
                     showNotifications: showNotifs
                   }, (response5) => {
                     if (response5 && response5.success) {
-                      showMessage('Settings saved successfully!', 'success');
+                      // Save scan engine
+                      chrome.runtime.sendMessage({
+                        action: 'updateScanEngine',
+                        scanEngine: scanEng
+                      }, (response6) => {
+                        if (response6 && response6.success) {
+                          // Save request delay
+                          chrome.runtime.sendMessage({
+                            action: 'updateRequestDelay',
+                            requestDelay: reqDelay
+                          }, (response7) => {
+                            if (response7 && response7.success) {
+                              // Save parallel concurrency
+                              chrome.runtime.sendMessage({
+                                action: 'updateParallelConcurrency',
+                                parallelConcurrency: parConcurrency
+                              }, (response8) => {
+                                if (response8 && response8.success) {
+                                  showMessage('Settings saved successfully!', 'success');
+                                } else {
+                                  showMessage('Failed to save concurrency setting', 'error');
+                                }
+                              });
+                            } else {
+                              showMessage('Failed to save request delay', 'error');
+                            }
+                          });
+                        } else {
+                          showMessage('Failed to save scan engine', 'error');
+                        }
+                      });
                     } else {
                       showMessage('Failed to save notification settings', 'error');
                     }
@@ -134,34 +214,142 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     '.env',
     '.env.local',
     '.env.production',
+    '.env.development',
+    '.env.staging',
     '.env.backup',
+    '.env.bak',
+    '.env.old',
+    '.env.save',
+    '.env.example',
     'config.php',
     'config.yaml',
-    '.bash_history',
+    'config.yml',
+    'config.json',
+    'config.xml',
+    'config.inc.php',
+    'configuration.php',
+    'settings.py',
+    'settings.json',
+    'application.yml',
+    'application.properties',
+    '.htaccess',
+    '.htpasswd',
+    'web.config',
+    'web.config.bak',
+    'nginx.conf',
+    'server-status',
+    'server-info',
     '.git/config',
     '.git/HEAD',
     '.gitignore',
+    '.svn/entries',
+    '.svn/wc.db',
+    '.hg/hgrc',
+    '.bash_history',
+    '.zsh_history',
+    '.sh_history',
     'backup.zip',
+    'backup.tar.gz',
     'backup.sql',
-    'db.sql',
-    'database.sql',
-    'debug.log',
-    'error.log',
-    'laravel.log',
-    'npm-debug.log',
-    'composer.lock',
-    'yarn.lock',
-    'package-lock.json',
-    'storage/logs/laravel.log',
-    'vendor/composer/installed.json',
-    'phpinfo.php',
-    'swagger.json',
+    'backup.sql.gz',
+    'backup.rar',
     'website.zip',
-    'dump.sql',
     '{DOMAIN}.zip',
+    '{DOMAIN}.tar.gz',
+    '{DOMAIN}.7z',
+    '{DOMAIN}.rar',
+    '{DOMAIN}-backup.zip',
+    'backup-{DOMAIN}.zip',
     'backup-{DOMAIN}.sql',
     '{DOMAIN}-db-backup.tar.gz',
-    'robots.txt'
+    '{DOMAIN}.sql',
+    '{DOMAIN}.sql.gz',
+    'site.zip',
+    'www.zip',
+    'html.zip',
+    'public.zip',
+    'db.sql',
+    'database.sql',
+    'dump.sql',
+    'data.sql',
+    'mysql.sql',
+    'debug.log',
+    'error.log',
+    'access.log',
+    'laravel.log',
+    'npm-debug.log',
+    'storage/logs/laravel.log',
+    'logs/error.log',
+    'logs/access.log',
+    'composer.json',
+    'composer.lock',
+    'package.json',
+    'package-lock.json',
+    'yarn.lock',
+    'Gemfile',
+    'Gemfile.lock',
+    'requirements.txt',
+    'Pipfile',
+    'vendor/composer/installed.json',
+    'phpinfo.php',
+    'info.php',
+    'test.php',
+    'adminer.php',
+    'wp-config.php',
+    'wp-config.php.bak',
+    'wp-config.php.old',
+    'wp-config.php.save',
+    'wp-config.php.swp',
+    'wp-config.php.txt',
+    'wp-login.php',
+    'xmlrpc.php',
+    'swagger.json',
+    'swagger.yaml',
+    'openapi.json',
+    'openapi.yaml',
+    'api-docs',
+    'graphql',
+    'api/v1',
+    'api/v2',
+    'robots.txt',
+    'sitemap.xml',
+    'crossdomain.xml',
+    'clientaccesspolicy.xml',
+    '.well-known/security.txt',
+    'security.txt',
+    'humans.txt',
+    'CHANGELOG.md',
+    'CHANGELOG.txt',
+    'README.md',
+    'README.txt',
+    'VERSION',
+    'version.txt',
+    '.DS_Store',
+    'Thumbs.db',
+    'actuator/health',
+    'actuator/env',
+    'actuator/info',
+    'actuator/mappings',
+    'actuator/configprops',
+    'WEB-INF/web.xml',
+    'elmah.axd',
+    'trace.axd',
+    'web.config.old',
+    'web.config.txt',
+    '__debug__/',
+    '_profiler/',
+    'telescope',
+    'Dockerfile',
+    'docker-compose.yml',
+    '.dockerenv',
+    '.travis.yml',
+    '.gitlab-ci.yml',
+    'Jenkinsfile',
+    '.aws/credentials',
+    '.ssh/id_rsa',
+    '.ssh/id_rsa.pub',
+    'firebase.json',
+    '.firebaserc'
   ];
   
   document.getElementById('files-list').value = defaultFiles.join('\n');

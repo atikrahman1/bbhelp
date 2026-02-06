@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Manage Exclusion List</title>
+  <title>Manage Scope & Exclusions</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -10,17 +10,42 @@
       background: #1a1a1a;
       color: #00ff41;
       margin: 0;
+      max-width: 1200px;
+      margin: 0 auto;
     }
     h2 {
       color: #00ff41;
       margin-bottom: 20px;
     }
-    .info {
+    h3 {
+      color: #3498db;
+      margin-top: 30px;
+      margin-bottom: 15px;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 20px;
+    }
+    .section {
       background: #2a2a2a;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .section.scope {
+      border: 2px solid #2ecc71;
+    }
+    .section.exclusion {
+      border: 2px solid #e74c3c;
+    }
+    .info {
+      background: #1a1a1a;
       padding: 15px;
       border-radius: 5px;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       color: #888;
+      font-size: 13px;
     }
     .info ul {
       margin: 10px 0;
@@ -30,23 +55,32 @@
       margin: 5px 0;
     }
     .example {
-      background: #1a1a1a;
+      background: #0a0a0a;
       padding: 10px;
       border-radius: 3px;
       margin-top: 10px;
       font-family: monospace;
       color: #f39c12;
+      font-size: 12px;
+    }
+    .logic-box {
+      background: #3498db;
+      color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-weight: bold;
     }
     textarea {
       width: 100%;
-      height: 300px;
-      background: #2a2a2a;
+      height: 250px;
+      background: #1a1a1a;
       color: #00ff41;
       border: 2px solid #00ff41;
       border-radius: 5px;
       padding: 10px;
       font-family: monospace;
-      font-size: 14px;
+      font-size: 13px;
       resize: vertical;
       box-sizing: border-box;
     }
@@ -54,6 +88,7 @@
       margin-top: 20px;
       display: flex;
       gap: 10px;
+      justify-content: center;
     }
     button {
       padding: 12px 24px;
@@ -77,10 +112,12 @@
       background: #c0392b;
     }
     .message {
-      margin-top: 10px;
-      padding: 10px;
+      margin-top: 20px;
+      padding: 15px;
       border-radius: 5px;
       display: none;
+      text-align: center;
+      font-weight: bold;
     }
     .message.success {
       background: #2ecc71;
@@ -90,31 +127,71 @@
       background: #e74c3c;
       color: #fff;
     }
+    @media (max-width: 768px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <h2>Manage Exclusion List</h2>
-  <div class="info">
-    <strong>Excluded domains will NOT be auto-scanned.</strong>
-    <p>Enter one domain pattern per line. Supports wildcards:</p>
-    <ul>
-      <li><strong>*.google.com</strong> - Excludes all Google subdomains (mail.google.com, drive.google.com, etc.)</li>
-      <li><strong>example.com</strong> - Excludes only example.com</li>
-      <li><strong>*.example.*</strong> - Excludes all subdomains and TLDs</li>
-    </ul>
-    <div class="example">
-      Example:<br>
-      *.google.com<br>
-      localhost<br>
-      127.0.0.1<br>
-      *.internal.company.com
+  <h2>🎯 Manage Scope & Exclusions</h2>
+  
+  <div class="logic-box">
+    📋 <strong>How it works:</strong><br>
+    • If Scope is EMPTY → Scan everything except Exclusions<br>
+    • If Scope has domains → Scan ONLY Scope domains (Exclusions ignored)
+  </div>
+  
+  <div class="container">
+    <!-- Scope Section -->
+    <div class="section scope">
+      <h3>✅ Scope (Whitelist)</h3>
+      <div class="info">
+        <strong>Only these domains will be auto-scanned</strong>
+        <p>Leave empty to scan all domains. Supports wildcards:</p>
+        <ul>
+          <li><strong>*.example.com</strong> - All example.com subdomains</li>
+          <li><strong>target.com</strong> - Only target.com</li>
+          <li><strong>*.bugcrowd.*</strong> - All bugcrowd domains</li>
+        </ul>
+        <div class="example">
+          Example:<br>
+          *.hackerone.com<br>
+          bugcrowd.com<br>
+          *.target-domain.io
+        </div>
+      </div>
+      <textarea id="scope-list" placeholder="Enter scope domains, one per line...&#10;Leave empty to scan everything"></textarea>
+    </div>
+    
+    <!-- Exclusion Section -->
+    <div class="section exclusion">
+      <h3>❌ Exclusions (Blacklist)</h3>
+      <div class="info">
+        <strong>These domains will NEVER be scanned</strong>
+        <p>Useful for excluding internal/sensitive domains. Supports wildcards:</p>
+        <ul>
+          <li><strong>*.google.com</strong> - All Google subdomains</li>
+          <li><strong>localhost</strong> - Local development</li>
+          <li><strong>*.internal.*</strong> - Internal domains</li>
+        </ul>
+        <div class="example">
+          Example:<br>
+          *.google.com<br>
+          localhost<br>
+          127.0.0.1<br>
+          *.internal.company.com
+        </div>
+      </div>
+      <textarea id="exclusion-list" placeholder="Enter excluded domains, one per line..."></textarea>
     </div>
   </div>
-  <textarea id="exclusion-list" placeholder="Enter domain patterns, one per line..."></textarea>
   
   <div class="buttons">
-    <button class="save-btn" id="save-btn">Save</button>
-    <button class="clear-btn" id="clear-btn">Clear All</button>
+    <button class="save-btn" id="save-btn">💾 Save Configuration</button>
+    <button class="clear-btn" id="clear-scope-btn">🗑️ Clear Scope</button>
+    <button class="clear-btn" id="clear-exclusion-btn">🗑️ Clear Exclusions</button>
   </div>
   <div class="message" id="message"></div>
   

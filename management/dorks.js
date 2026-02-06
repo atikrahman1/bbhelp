@@ -17,7 +17,15 @@ function loadDorks() {
     if (response && response.customDorks) {
       dorks = response.customDorks;
       renderDorks();
-      console.log('Loaded', dorks.length, 'dorks'); // Debug log
+      console.log('Loaded', dorks.length, 'dorks');
+      
+      // Load dorks delay
+      if (response.dorksDelay !== undefined) {
+        const delayEl = document.getElementById('dorks-delay');
+        if (delayEl) {
+          delayEl.value = response.dorksDelay / 1000; // Convert ms to seconds
+        }
+      }
     } else {
       console.warn('No dorks response received, retrying...'); // Debug log
       // Retry after a short delay
@@ -81,12 +89,25 @@ function renderDorks() {
 
 // Save button
 document.getElementById('save-btn').addEventListener('click', () => {
+  const delaySeconds = parseFloat(document.getElementById('dorks-delay').value) || 3;
+  const delayMs = Math.round(delaySeconds * 1000);
+  
   chrome.runtime.sendMessage({ 
     action: 'updateCustomDorks', 
     customDorks: dorks 
   }, (response) => {
     if (response && response.success) {
-      showMessage('Google Dorks saved successfully!', 'success');
+      // Save delay
+      chrome.runtime.sendMessage({
+        action: 'updateDorksDelay',
+        dorksDelay: delayMs
+      }, (response2) => {
+        if (response2 && response2.success) {
+          showMessage('Google Dorks & delay saved successfully!', 'success');
+        } else {
+          showMessage('Dorks saved but failed to save delay', 'error');
+        }
+      });
     } else {
       showMessage('Failed to save dorks', 'error');
     }

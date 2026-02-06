@@ -4,6 +4,7 @@ let scannerEnabled = false;
 let sensitiveFilesList = [];
 let previewLength = 100;
 let exclusionList = [];
+let scopeList = [];
 let customCommands = [];
 let customDorks = [];
 let customTools = [];
@@ -12,18 +13,77 @@ let falsePositiveProtection = true; // Default: enabled
 let showNotifications = true; // Default: enabled
 let customPorts = []; // Custom port list for HTTP scanning
 let autoPortScan = false; // Auto port scan on page load
+let scanEngine = 'sequential'; // 'sequential' or 'parallel'
+let requestDelay = 100; // ms delay between requests (rate limiting)
+let parallelConcurrency = 5; // Number of concurrent requests for parallel engine
+let dorksDelay = 3000; // ms delay between opening Google dork tabs
 
 // Track active scans per tab
 let activeScans = {
   // tabId: { type: 'sensitive' | 'port', startTime: timestamp, total: number, completed: number }
 };
 
+// Draw circular progress icon on extension badge
+function updateProgressIcon(tabId, completed, total) {
+  const size = 32;
+  const canvas = new OffscreenCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  const center = size / 2;
+  const radius = 12;
+  const lineWidth = 3;
+  const progress = total > 0 ? completed / total : 0;
+  
+  // Clear
+  ctx.clearRect(0, 0, size, size);
+  
+  // Background circle (dark)
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = '#333333';
+  ctx.lineWidth = lineWidth;
+  ctx.stroke();
+  
+  // Progress arc (green)
+  if (progress > 0) {
+    ctx.beginPath();
+    ctx.arc(center, center, radius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
+    ctx.strokeStyle = '#00ff41';
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+  
+  // Percentage text in center
+  const pct = Math.round(progress * 100);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 9px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${pct}%`, center, center);
+  
+  const imageData = ctx.getImageData(0, 0, size, size);
+  chrome.action.setIcon({ tabId: tabId, imageData: { '32': imageData } });
+}
+
+// Restore original extension icon
+function restoreIcon(tabId) {
+  chrome.action.setIcon({
+    tabId: tabId,
+    path: {
+      '16': 'icons/icon16.png',
+      '48': 'icons/icon48.png',
+      '128': 'icons/icon128.png'
+    }
+  });
+}
+
 // Load settings from storage
-chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'showNotifications', 'customPorts', 'autoPortScan'], (result) => {
+chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'scopeList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'showNotifications', 'customPorts', 'autoPortScan', 'scanEngine', 'requestDelay', 'parallelConcurrency', 'dorksDelay'], (result) => {
   scannerEnabled = result.scannerEnabled || false;
   sensitiveFilesList = result.sensitiveFilesList || getDefaultFilesList();
   previewLength = result.previewLength || 100;
   exclusionList = result.exclusionList || [];
+  scopeList = result.scopeList || [];
   customCommands = result.customCommands || getDefaultCommands();
   customDorks = result.customDorks || getDefaultDorks();
   customTools = result.customTools || getDefaultTools();
@@ -32,6 +92,10 @@ chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength
   showNotifications = result.showNotifications !== undefined ? result.showNotifications : true;
   customPorts = result.customPorts || getDefaultPorts();
   autoPortScan = result.autoPortScan || false;
+  scanEngine = result.scanEngine || 'sequential';
+  requestDelay = result.requestDelay !== undefined ? result.requestDelay : 100;
+  parallelConcurrency = result.parallelConcurrency || 5;
+  dorksDelay = result.dorksDelay !== undefined ? result.dorksDelay : 3000;
   
   // Migrate existing scan results to new scan history format (one-time migration)
   migrateScanResults();
@@ -187,37 +251,161 @@ async function checkPortFromBackground(domain, port) {
 // Default sensitive files list
 function getDefaultFilesList() {
   return [
+    // Environment & Config
     '.env',
     '.env.local',
     '.env.production',
+    '.env.development',
+    '.env.staging',
     '.env.backup',
+    '.env.bak',
+    '.env.old',
+    '.env.save',
+    '.env.example',
     'config.php',
     'config.yaml',
-    '.bash_history',
+    'config.yml',
+    'config.json',
+    'config.xml',
+    'config.inc.php',
+    'configuration.php',
+    'settings.py',
+    'settings.json',
+    'application.yml',
+    'application.properties',
+    // Server Config
+    '.htaccess',
+    '.htpasswd',
+    'web.config',
+    'web.config.bak',
+    'nginx.conf',
+    'server-status',
+    'server-info',
+    // Version Control
     '.git/config',
     '.git/HEAD',
     '.gitignore',
+    '.svn/entries',
+    '.svn/wc.db',
+    '.hg/hgrc',
+    // Shell & History
+    '.bash_history',
+    '.zsh_history',
+    '.sh_history',
+    // Backups & Archives
     'backup.zip',
+    'backup.tar.gz',
     'backup.sql',
-    'db.sql',
-    'database.sql',
-    'debug.log',
-    'error.log',
-    'laravel.log',
-    'npm-debug.log',
-    'composer.lock',
-    'yarn.lock',
-    'package-lock.json',
-    'storage/logs/laravel.log',
-    'vendor/composer/installed.json',
-    'phpinfo.php',
-    'swagger.json',
+    'backup.sql.gz',
+    'backup.rar',
     'website.zip',
-    'dump.sql',
     '{DOMAIN}.zip',
+    '{DOMAIN}.tar.gz',
+    '{DOMAIN}.7z',
+    '{DOMAIN}.rar',
+    '{DOMAIN}-backup.zip',
+    'backup-{DOMAIN}.zip',
     'backup-{DOMAIN}.sql',
     '{DOMAIN}-db-backup.tar.gz',
-    'robots.txt'
+    '{DOMAIN}.sql',
+    '{DOMAIN}.sql.gz',
+    'site.zip',
+    'www.zip',
+    'html.zip',
+    'public.zip',
+    // Database
+    'db.sql',
+    'database.sql',
+    'dump.sql',
+    'data.sql',
+    'mysql.sql',
+    // Logs
+    'debug.log',
+    'error.log',
+    'access.log',
+    'laravel.log',
+    'npm-debug.log',
+    'storage/logs/laravel.log',
+    'logs/error.log',
+    'logs/access.log',
+    // Package & Dependency
+    'composer.json',
+    'composer.lock',
+    'package.json',
+    'package-lock.json',
+    'yarn.lock',
+    'Gemfile',
+    'Gemfile.lock',
+    'requirements.txt',
+    'Pipfile',
+    'vendor/composer/installed.json',
+    // PHP
+    'phpinfo.php',
+    'info.php',
+    'test.php',
+    'adminer.php',
+    'wp-config.php',
+    'wp-config.php.bak',
+    'wp-config.php.old',
+    'wp-config.php.save',
+    'wp-config.php.swp',
+    'wp-config.php.txt',
+    'wp-login.php',
+    'xmlrpc.php',
+    // API & Documentation
+    'swagger.json',
+    'swagger.yaml',
+    'openapi.json',
+    'openapi.yaml',
+    'api-docs',
+    'graphql',
+    'api/v1',
+    'api/v2',
+    // Info Disclosure
+    'robots.txt',
+    'sitemap.xml',
+    'crossdomain.xml',
+    'clientaccesspolicy.xml',
+    '.well-known/security.txt',
+    'security.txt',
+    'humans.txt',
+    'CHANGELOG.md',
+    'CHANGELOG.txt',
+    'README.md',
+    'README.txt',
+    'VERSION',
+    'version.txt',
+    '.DS_Store',
+    'Thumbs.db',
+    // Java / Spring Boot
+    'actuator/health',
+    'actuator/env',
+    'actuator/info',
+    'actuator/mappings',
+    'actuator/configprops',
+    'WEB-INF/web.xml',
+    // .NET
+    'elmah.axd',
+    'trace.axd',
+    'web.config.old',
+    'web.config.txt',
+    // Debug & Profiling
+    '__debug__/',
+    '_profiler/',
+    'telescope',
+    // Docker & CI
+    'Dockerfile',
+    'docker-compose.yml',
+    '.dockerenv',
+    '.travis.yml',
+    '.gitlab-ci.yml',
+    'Jenkinsfile',
+    // Cloud & Keys
+    '.aws/credentials',
+    '.ssh/id_rsa',
+    '.ssh/id_rsa.pub',
+    'firebase.json',
+    '.firebaserc'
   ];
 }
 
@@ -285,9 +473,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (url.protocol === 'http:' || url.protocol === 'https:') {
       const domain = url.host;
 
-      // Check if domain is excluded
-      if (isDomainExcluded(domain)) {
-        console.log('Domain excluded from scanning:', domain);
+      // Check scope/exclusion logic
+      if (!isDomainAllowed(domain)) {
+        console.log('Domain not allowed for scanning:', domain);
         return;
       }
 
@@ -325,8 +513,8 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
       if (url.protocol === 'http:' || url.protocol === 'https:') {
         const domain = url.host;
         
-        // Check if domain is excluded
-        if (isDomainExcluded(domain)) {
+        // Check scope/exclusion logic
+        if (!isDomainAllowed(domain)) {
           return;
         }
         
@@ -339,17 +527,25 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   });
 });
 
-// Check if domain matches exclusion patterns
-function isDomainExcluded(domain) {
-  return exclusionList.some(pattern => {
-    // Convert wildcard pattern to regex
+// Check if domain matches a pattern list (wildcard support)
+function domainMatchesPatterns(domain, patterns) {
+  return patterns.some(pattern => {
     const regexPattern = pattern
-      .replace(/\./g, '\\.')  // Escape dots
-      .replace(/\*/g, '.*');   // Convert * to .*
-    
+      .replace(/\./g, '\\.')
+      .replace(/\*/g, '.*');
     const regex = new RegExp('^' + regexPattern + '$', 'i');
     return regex.test(domain);
   });
+}
+
+// Check if domain is allowed for scanning (scope + exclusion logic)
+function isDomainAllowed(domain) {
+  // If scope list has entries → only scan those domains (exclusions ignored)
+  if (scopeList.length > 0) {
+    return domainMatchesPatterns(domain, scopeList);
+  }
+  // If scope list is empty → scan everything except exclusions
+  return !domainMatchesPatterns(domain, exclusionList);
 }
 
 // Check if domain should be scanned
@@ -598,6 +794,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     exclusionList = request.exclusionList;
     chrome.storage.local.set({ exclusionList: exclusionList });
     sendResponse({ success: true });
+  } else if (request.action === 'updateScopeList') {
+    scopeList = request.scopeList;
+    chrome.storage.local.set({ scopeList: scopeList });
+    sendResponse({ success: true });
   } else if (request.action === 'updateCustomCommands') {
     customCommands = request.customCommands;
     chrome.storage.local.set({ customCommands: customCommands });
@@ -618,6 +818,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     customDorks = request.customDorks;
     chrome.storage.local.set({ customDorks: customDorks });
     sendResponse({ success: true });
+  } else if (request.action === 'updateDorksDelay') {
+    dorksDelay = request.dorksDelay;
+    chrome.storage.local.set({ dorksDelay: dorksDelay });
+    sendResponse({ success: true });
   } else if (request.action === 'updateCustomTools') {
     customTools = request.customTools;
     chrome.storage.local.set({ customTools: customTools });
@@ -630,12 +834,44 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     autoPortScan = request.autoPortScan;
     chrome.storage.local.set({ autoPortScan: autoPortScan });
     sendResponse({ success: true });
+  } else if (request.action === 'updateScanEngine') {
+    scanEngine = request.scanEngine;
+    chrome.storage.local.set({ scanEngine: scanEngine });
+    sendResponse({ success: true });
+  } else if (request.action === 'updateRequestDelay') {
+    requestDelay = request.requestDelay;
+    chrome.storage.local.set({ requestDelay: requestDelay });
+    sendResponse({ success: true });
+  } else if (request.action === 'updateParallelConcurrency') {
+    parallelConcurrency = request.parallelConcurrency;
+    chrome.storage.local.set({ parallelConcurrency: parallelConcurrency });
+    sendResponse({ success: true });
+  } else if (request.action === 'openAllDorks') {
+    // Open all Google dorks with staggered delay (runs in background so popup can close)
+    const dorks = customDorks.length > 0 ? customDorks : getDefaultDorks();
+    let domain = '';
+    try {
+      const url = new URL(request.url);
+      domain = url.hostname.replace('www.', '');
+    } catch (e) { /* use empty domain */ }
+    
+    const delay = dorksDelay || 3000;
+    dorks.forEach((dorkObj, index) => {
+      setTimeout(() => {
+        const finalDork = dorkObj.dork.replace(/\{DOMAIN\}/g, domain);
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(finalDork)}`;
+        chrome.tabs.create({ url: searchUrl, active: false });
+      }, index * delay);
+    });
+    
+    sendResponse({ success: true });
   } else if (request.action === 'getSettings') {
     sendResponse({
       scannerEnabled: scannerEnabled,
       sensitiveFilesList: sensitiveFilesList,
       previewLength: previewLength,
       exclusionList: exclusionList,
+      scopeList: scopeList,
       customCommands: customCommands,
       customDorks: customDorks,
       customTools: customTools,
@@ -643,7 +879,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       falsePositiveProtection: falsePositiveProtection,
       showNotifications: showNotifications,
       customPorts: customPorts,
-      autoPortScan: autoPortScan
+      autoPortScan: autoPortScan,
+      scanEngine: scanEngine,
+      requestDelay: requestDelay,
+      parallelConcurrency: parallelConcurrency,
+      dorksDelay: dorksDelay
     });
   } else if (request.action === 'getFoundFiles') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -731,7 +971,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           filesList: sensitiveFilesList,
           previewLength: previewLength,
           baseUrl: baseUrl,
-          falsePositiveProtection: falsePositiveProtection
+          falsePositiveProtection: falsePositiveProtection,
+          scanEngine: scanEngine,
+          requestDelay: requestDelay,
+          parallelConcurrency: parallelConcurrency
         }, (response) => {
           if (chrome.runtime.lastError) {
             // Content script might not be ready, try injecting it
@@ -746,8 +989,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                   filesList: sensitiveFilesList,
                   previewLength: previewLength,
                   baseUrl: baseUrl,
-                  falsePositiveProtection: falsePositiveProtection
+                  falsePositiveProtection: falsePositiveProtection,
+                  scanEngine: scanEngine,
+                  requestDelay: requestDelay,
+                  parallelConcurrency: parallelConcurrency
                 }, (retryResponse) => {
+                  // Clean up active scan tracking
+                  delete activeScans[request.tabId];
+                  restoreIcon(request.tabId);
+                  
                   if (retryResponse && retryResponse.foundFiles) {
                     // Store results in the old format for compatibility
                     processScanResults(request.tabId, domain, retryResponse.foundFiles, null);
@@ -769,12 +1019,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 });
               }, 500);
             }).catch(err => {
+              delete activeScans[request.tabId];
+              restoreIcon(request.tabId);
               sendResponse({ success: false, message: 'Failed to inject content script: ' + err.message });
             });
             return;
           }
 
           if (response && response.foundFiles) {
+            // Clean up active scan tracking
+            delete activeScans[request.tabId];
+            restoreIcon(request.tabId);
+            
             // Store results in the old format for compatibility
             processScanResults(request.tabId, domain, response.foundFiles, null);
             
@@ -790,27 +1046,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               protectionEnabled: falsePositiveProtection
             });
           } else {
+            delete activeScans[request.tabId];
+            restoreIcon(request.tabId);
             sendResponse({ success: false, message: 'Scan failed' });
           }
         });
       });
     } catch (error) {
+      delete activeScans[request.tabId];
+      restoreIcon(request.tabId);
       sendResponse({ success: false, message: 'Invalid URL: ' + error.message });
     }
 
     return true; // Keep channel open for async response
   } else if (request.action === 'reloadSettings') {
     // Reload all settings from storage after import
-    chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection'], (result) => {
+    chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'scopeList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'scanEngine', 'requestDelay', 'parallelConcurrency'], (result) => {
       scannerEnabled = result.scannerEnabled || false;
       sensitiveFilesList = result.sensitiveFilesList || getDefaultFilesList();
       previewLength = result.previewLength || 100;
       exclusionList = result.exclusionList || [];
+      scopeList = result.scopeList || [];
       customCommands = result.customCommands || getDefaultCommands();
       customDorks = result.customDorks || getDefaultDorks();
       customTools = result.customTools || getDefaultTools();
       rescanInterval = result.rescanInterval || 12;
       falsePositiveProtection = result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true;
+      scanEngine = result.scanEngine || 'sequential';
+      requestDelay = result.requestDelay !== undefined ? result.requestDelay : 100;
+      parallelConcurrency = result.parallelConcurrency || 5;
       
       sendResponse({ success: true });
     });
@@ -825,18 +1089,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     };
     sendResponse({ success: true });
   } else if (request.action === 'scanProgress') {
-    // Update scan progress
-    if (activeScans[request.tabId]) {
-      activeScans[request.tabId].completed = request.completed;
-      activeScans[request.tabId].total = request.total;
+    // Update scan progress (use sender.tab.id for content script messages)
+    const tabId = request.tabId || (sender && sender.tab ? sender.tab.id : null);
+    if (tabId && activeScans[tabId]) {
+      activeScans[tabId].completed = request.completed;
+      activeScans[tabId].total = request.total;
+    }
+    // Update extension icon with circular progress
+    if (tabId && request.total > 0) {
+      updateProgressIcon(tabId, request.completed, request.total);
+      // Show progress on badge too
+      const pct = Math.round((request.completed / request.total) * 100);
+      chrome.action.setBadgeBackgroundColor({ color: '#00ff41', tabId: tabId });
+      chrome.action.setBadgeText({ text: `${pct}%`, tabId: tabId });
     }
     // Forward progress to popup if it's listening
     chrome.runtime.sendMessage(request).catch(() => {
       // Popup not open, ignore
     });
   } else if (request.action === 'scanCompleted') {
-    // Remove from active scans
+    // Remove from active scans and restore icon
     delete activeScans[request.tabId];
+    restoreIcon(request.tabId);
     sendResponse({ success: true });
   } else if (request.action === 'getActiveScan') {
     // Check if tab has active scan
@@ -908,6 +1182,11 @@ async function performPortScan(tabId, domain) {
         activeScans[tabId].completed = i + 1;
       }
       
+      // Update extension icon with progress
+      updateProgressIcon(tabId, i + 1, customPorts.length);
+      chrome.action.setBadgeBackgroundColor({ color: '#00ff41', tabId: tabId });
+      chrome.action.setBadgeText({ text: `${Math.round(((i + 1) / customPorts.length) * 100)}%`, tabId: tabId });
+      
       // Send progress update to popup
       chrome.runtime.sendMessage({
         action: 'portScanProgress',
@@ -944,6 +1223,11 @@ async function performPortScan(tabId, domain) {
         activeScans[tabId].completed = i + 1;
       }
       
+      // Update extension icon with progress
+      updateProgressIcon(tabId, i + 1, customPorts.length);
+      chrome.action.setBadgeBackgroundColor({ color: '#00ff41', tabId: tabId });
+      chrome.action.setBadgeText({ text: `${Math.round(((i + 1) / customPorts.length) * 100)}%`, tabId: tabId });
+      
       // Send progress update
       chrome.runtime.sendMessage({
         action: 'portScanProgress',
@@ -971,6 +1255,7 @@ async function performPortScan(tabId, domain) {
   
   // Remove from active scans
   delete activeScans[tabId];
+  restoreIcon(tabId);
   
   // Notify completion
   const openPorts = results.filter(r => r.status === 'open').length;

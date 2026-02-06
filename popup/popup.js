@@ -164,53 +164,16 @@ function executeDork(dork) {
 
 // Open all dorks at once
 function openAllDorks() {
-  chrome.storage.local.get(['customDorks'], (result) => {
-    let dorks = result.customDorks;
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0]) return;
     
-    // If no dorks in storage, use defaults
-    if (!dorks || dorks.length === 0) {
-      dorks = [
-        { name: 'Login Pages', dork: 'site:{DOMAIN} inurl:login' },
-        { name: 'Text Files', dork: 'site:{DOMAIN} filetype:txt' },
-        { name: 'PDF Files', dork: 'site:{DOMAIN} filetype:pdf' },
-        { name: 'Admin Pages', dork: 'site:{DOMAIN} inurl:admin' },
-        { name: 'Config Files', dork: 'site:{DOMAIN} filetype:config' },
-        { name: 'SQL Files', dork: 'site:{DOMAIN} filetype:sql' },
-        { name: 'ENV Files', dork: 'site:{DOMAIN} filetype:env' },
-        { name: 'Backup Files', dork: 'site:{DOMAIN} inurl:backup' }
-      ];
-    }
-    
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        try {
-          const url = new URL(tabs[0].url);
-          const domain = url.hostname.replace('www.', '');
-
-          // Open each dork in a new tab
-          dorks.forEach((dorkObj, index) => {
-            // Add small delay between tabs to avoid browser blocking
-            setTimeout(() => {
-              const finalDork = dorkObj.dork.replace(/\{DOMAIN\}/g, domain);
-              const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(finalDork)}`;
-              chrome.tabs.create({ url: searchUrl, active: false }); // Don't activate each tab
-            }, index * 100); // 100ms delay between each tab
-          });
-          
-          showMessage(`Opening ${dorks.length} Google Dorks...`, 'success');
-        } catch (e) {
-          // If URL parsing fails, open with placeholders
-          dorks.forEach((dorkObj, index) => {
-            setTimeout(() => {
-              const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(dorkObj.dork)}`;
-              chrome.tabs.create({ url: searchUrl, active: false });
-            }, index * 100);
-          });
-          
-          showMessage(`Opening ${dorks.length} Google Dorks...`, 'success');
-        }
-      }
+    // Delegate to background script so tabs open even if popup closes
+    chrome.runtime.sendMessage({
+      action: 'openAllDorks',
+      url: tabs[0].url
     });
+    
+    showMessage('Opening Google Dorks (3s apart to avoid CAPTCHA)...', 'success');
   });
 }
 
@@ -1250,11 +1213,15 @@ function exportConfiguration() {
     'sensitiveFilesList', 
     'previewLength',
     'exclusionList',
+    'scopeList',
     'customCommands',
     'customDorks',
     'customTools',
     'rescanInterval',
-    'falsePositiveProtection'
+    'falsePositiveProtection',
+    'scanEngine',
+    'requestDelay',
+    'parallelConcurrency'
   ], (result) => {
     if (chrome.runtime.lastError) {
       showMessage('Failed to export configuration', 'error');
@@ -1273,11 +1240,15 @@ function exportConfiguration() {
         sensitiveFilesList: result.sensitiveFilesList || [],
         previewLength: result.previewLength || 100,
         exclusionList: result.exclusionList || [],
+        scopeList: result.scopeList || [],
         customCommands: result.customCommands || [],
         customDorks: result.customDorks || [],
         customTools: result.customTools || [],
         rescanInterval: result.rescanInterval || 12,
-        falsePositiveProtection: result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true
+        falsePositiveProtection: result.falsePositiveProtection !== undefined ? result.falsePositiveProtection : true,
+        scanEngine: result.scanEngine || 'sequential',
+        requestDelay: result.requestDelay !== undefined ? result.requestDelay : 100,
+        parallelConcurrency: result.parallelConcurrency || 5
       }
     };
 
@@ -1332,11 +1303,15 @@ function importConfiguration() {
         if (config.settings.sensitiveFilesList) settingsToImport.sensitiveFilesList = config.settings.sensitiveFilesList;
         if (config.settings.previewLength) settingsToImport.previewLength = config.settings.previewLength;
         if (config.settings.exclusionList) settingsToImport.exclusionList = config.settings.exclusionList;
+        if (config.settings.scopeList) settingsToImport.scopeList = config.settings.scopeList;
         if (config.settings.customCommands) settingsToImport.customCommands = config.settings.customCommands;
         if (config.settings.customDorks) settingsToImport.customDorks = config.settings.customDorks;
         if (config.settings.customTools) settingsToImport.customTools = config.settings.customTools;
         if (config.settings.rescanInterval) settingsToImport.rescanInterval = config.settings.rescanInterval;
         if (config.settings.falsePositiveProtection !== undefined) settingsToImport.falsePositiveProtection = config.settings.falsePositiveProtection;
+        if (config.settings.scanEngine) settingsToImport.scanEngine = config.settings.scanEngine;
+        if (config.settings.requestDelay !== undefined) settingsToImport.requestDelay = config.settings.requestDelay;
+        if (config.settings.parallelConcurrency) settingsToImport.parallelConcurrency = config.settings.parallelConcurrency;
 
         chrome.storage.local.set(settingsToImport, () => {
           if (chrome.runtime.lastError) {
@@ -1631,7 +1606,14 @@ function checkForActiveScans() {
         console.log('Active scan detected:', response.scanType, 'Progress:', response.completed, '/', response.total);
         
         if (response.scanType === 'sensitive') {
-          // Restore sensitive file scan UI
+          // Restore sensitive file scan UI - expand the section
+          const toggle = document.getElementById('sensitive-toggle');
+          const content = document.getElementById('sensitive-content');
+          if (toggle && content) {
+            toggle.classList.add('active');
+            content.classList.add('active');
+          }
+          
           const progressDiv = document.getElementById('sensitive-scan-progress');
           const progressFill = document.getElementById('sensitive-progress-fill');
           const progressText = document.getElementById('sensitive-progress-text');
@@ -1656,7 +1638,14 @@ function checkForActiveScans() {
             buttonCurrentUrl.textContent = 'Scanning...';
           }
         } else if (response.scanType === 'port') {
-          // Restore port scan UI
+          // Restore port scan UI - expand the section
+          const toggle = document.getElementById('service-discovery-toggle');
+          const content = document.getElementById('service-discovery-content');
+          if (toggle && content) {
+            toggle.classList.add('active');
+            content.classList.add('active');
+          }
+          
           const progressDiv = document.getElementById('port-scan-progress');
           const progressFill = document.getElementById('port-progress-fill');
           const progressText = document.getElementById('port-progress-text');

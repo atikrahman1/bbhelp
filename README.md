@@ -45,15 +45,25 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 <img width="1898" height="970" alt="bbhelp-7" src="https://github.com/user-attachments/assets/f2fae31c-7250-4609-ab04-47e7780f51d1" />
 
 
-- **30+ Default Files**: `.env`, `config.php`, `.git/config`, `backup.sql`, `phpinfo.php`, etc.
+- **130+ Default Files**: Covers env files, server configs, version control, WordPress, Spring Boot, .NET, backups, API docs, cloud credentials, and more
 - **Variable Support**: `{DOMAIN}.zip`, `backup-{DOMAIN}.sql`
+- **Dual Scan Engine**:
+  - **Sequential**: One file at a time — stealthier, less likely to trigger WAF
+  - **Parallel**: Batch requests with configurable concurrency — much faster
+- **Rate Limiting**: Configurable delay between requests (0-5000ms) to avoid IP bans
 - **Smart Timeouts**: 3s-30s based on file size, partial download for large files
 - **Auto-Scan**: Configurable scanning on page load
-- **Progress Tracking**: Real-time scanning progress with file-by-file updates
-- **Dual Scan Modes**: 
+- **Progress Tracking**: Real-time progress with circular progress indicator on extension icon
+- **Dual Scan Modes**:
   - **Scan Main Host**: Fuzzes at domain root (`example.com/FUZZ`)
   - **Scan Current URL**: Fuzzes at current path (`example.com/admin/FUZZ`)
 - **Persistent Progress**: Scan continues even if popup is closed, progress restores on reopen
+
+### 🎯 Scope & Exclusion Management
+- **Scope (Whitelist)**: Define domains to ALWAYS scan — useful for specific bug bounty programs
+- **Exclusions (Blacklist)**: Define domains to NEVER scan
+- **Smart Logic**: If scope is empty → scan everything except exclusions. If scope has domains → scan ONLY those domains
+- **Wildcard Support**: `*.example.com`, `*.bugcrowd.*`
 
 ⚠️ **Warning**: Auto-scanning with large file lists can be very noisy and may get you blocked by target websites. The sensitive file fuzzer is designed to scan only small, targeted lists of files.
 
@@ -65,7 +75,7 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 
 ### 🔍 Google Dorks & 📋 Copy Commands
 - **8 Default Dorks**: Login pages, admin panels, config files, backups
-- **Open All Dorks**: Launch all dorks at once in separate tabs
+- **Open All Dorks**: Launch all dorks in separate tabs with configurable delay to avoid CAPTCHA
 - **6 Default Commands**: Nmap, Subfinder, FFUF, Nuclei
 - **Fully Customizable**: Add/edit/remove via management pages
 - **Variable Support**: `{DOMAIN}`, `{URL}`, `{TARGET}`, `{HOST}`, `{PROTOCOL}`
@@ -115,10 +125,12 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 - **Results**: View open ports with clickable links
 
 ### File Scanner  
-- **File List**: Customize sensitive files to check
+- **File List**: Customize sensitive files to check (130+ defaults)
+- **Scan Engine**: Choose Sequential (stealth) or Parallel (speed)
+- **Rate Limiting**: Set delay between requests to avoid WAF/bans
 - **Auto-Scan**: Enable/disable automatic scanning
 - **False Positive Protection**: Smart filtering (recommended: ON)
-- **Exclusions**: Skip specific domains
+- **Scope & Exclusions**: Whitelist or blacklist domains for scanning
 
 ### Variables
 Use in tools, commands, and file paths:

@@ -107,7 +107,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else if (request.action === 'scanSensitiveFilesWithProgress') {
         // Perform sensitive file scanning with progress updates
         const protection = request.falsePositiveProtection !== undefined ? request.falsePositiveProtection : true;
-        scanSensitiveFilesWithProgress(request.filesList, request.previewLength, request.baseUrl, protection)
+        const engine = request.scanEngine || 'sequential';
+        const delay = request.requestDelay !== undefined ? request.requestDelay : 100;
+        const concurrency = request.parallelConcurrency || 5;
+        scanSensitiveFilesWithProgress(request.filesList, request.previewLength, request.baseUrl, protection, engine, delay, concurrency)
             .then(foundFiles => {
                 sendResponse({ foundFiles: foundFiles, protectionEnabled: protection });
             })
@@ -507,23 +510,99 @@ async function scanSensitiveFiles(filesList, previewLength, baseUrl, falsePositi
     return foundFiles;
 }
 
+// Rate limiting delay helper
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Scan a single file and return response object (shared by both engines)
+async function scanSingleFile(file, baseUrl, previewLength) {
+    const processedFile = replaceVariables(file, baseUrl);
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const fileUrl = `${cleanBaseUrl}/${processedFile}`;
+    
+    try {
+        // HEAD request first
+        let contentLength = 0;
+        try {
+            const headResponse = await Promise.race([
+                fetch(fileUrl, { method: 'HEAD' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('head_timeout')), 2000))
+            ]);
+            if (headResponse && headResponse.ok) {
+                contentLength = parseInt(headResponse.headers.get('content-length')) || 0;
+            }
+        } catch (e) { /* HEAD failed, continue */ }
+        
+        // Dynamic timeout
+        let timeout = 3000;
+        if (contentLength > 100 * 1024 * 1024) timeout = 30000;
+        else if (contentLength > 10 * 1024 * 1024) timeout = 15000;
+        else if (contentLength > 1024 * 1024) timeout = 8000;
+        
+        const getResponse = await Promise.race([
+            fetch(fileUrl, { method: 'GET' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+        ]);
+
+        if (getResponse.ok) {
+            const contentType = getResponse.headers.get('content-type') || 'unknown';
+            let actualSize = parseInt(getResponse.headers.get('content-length')) || contentLength;
+            let text;
+            
+            if (actualSize > 50 * 1024 * 1024) {
+                const reader = getResponse.body.getReader();
+                const chunks = [];
+                let totalRead = 0;
+                const maxRead = 1024 * 1024;
+                try {
+                    while (totalRead < maxRead) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        totalRead += value.length;
+                    }
+                    reader.releaseLock();
+                    const decoder = new TextDecoder();
+                    text = decoder.decode(new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], [])));
+                } catch (e) {
+                    text = await getResponse.text();
+                    actualSize = text.length;
+                }
+            } else {
+                text = await getResponse.text();
+                actualSize = text.length;
+            }
+            
+            return {
+                file: processedFile,
+                url: fileUrl,
+                status: getResponse.status,
+                contentType: contentType,
+                size: actualSize,
+                text: text,
+                hash: simpleHash(text)
+            };
+        }
+    } catch (error) {
+        console.log(`[Scanner] Failed to scan ${processedFile}: ${error.message}`);
+    }
+    return null;
+}
+
 // Scan for sensitive files with progress updates
-async function scanSensitiveFilesWithProgress(filesList, previewLength, baseUrl, falsePositiveProtection = true) {
-    const foundFiles = [];
+async function scanSensitiveFilesWithProgress(filesList, previewLength, baseUrl, falsePositiveProtection = true, scanEngine = 'sequential', requestDelay = 100, parallelConcurrency = 5) {
     const responses = [];
     
-    // Step 1: Get baseline 404 response (only if protection is enabled)
+    // Step 1: Get baseline 404 response
     let baseline404 = null;
-    
     if (falsePositiveProtection) {
         const randomFile = `nonexistent-${Math.random().toString(36).substring(7)}-${Date.now()}.txt`;
-        
         try {
             const baselineResponse = await Promise.race([
                 fetch(`${baseUrl}/${randomFile}`, { method: 'GET' }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
             ]);
-            
             const baselineText = await baselineResponse.text();
             baseline404 = {
                 status: baselineResponse.status,
@@ -531,127 +610,60 @@ async function scanSensitiveFilesWithProgress(filesList, previewLength, baseUrl,
                 hash: simpleHash(baselineText),
                 contentType: baselineResponse.headers.get('content-type') || 'unknown'
             };
-        } catch (error) {
-            // Baseline request failed, continue without it
-        }
+        } catch (error) { /* continue without baseline */ }
     }
 
-    // Step 2: Scan all files with smart timeout strategy and progress updates
-    for (let i = 0; i < filesList.length; i++) {
-        const file = filesList[i];
+    // Step 2: Scan files using selected engine
+    let completedCount = 0;
+    
+    if (scanEngine === 'parallel') {
+        // Parallel engine: process files in batches with concurrency limit
+        console.log(`[Scanner] Using PARALLEL engine (concurrency: ${parallelConcurrency}, delay: ${requestDelay}ms)`);
         
-        // Send progress update
-        chrome.runtime.sendMessage({
-            action: 'scanProgress',
-            completed: i,
-            total: filesList.length,
-            currentFile: file
-        });
-        
-        // Replace variables in file path
-        const processedFile = replaceVariables(file, baseUrl);
-        // Remove trailing slash from baseUrl if present to avoid double slashes
-        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        const fileUrl = `${cleanBaseUrl}/${processedFile}`;
-        
-        try {
-            // 1. HEAD Request First - Quick check if file exists and get size
-            let headResponse;
-            let contentLength = 0;
+        for (let i = 0; i < filesList.length; i += parallelConcurrency) {
+            const batch = filesList.slice(i, i + parallelConcurrency);
             
-            try {
-                headResponse = await Promise.race([
-                    fetch(fileUrl, { method: 'HEAD' }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('head_timeout')), 2000))
-                ]);
-                
-                if (headResponse && headResponse.ok) {
-                    contentLength = parseInt(headResponse.headers.get('content-length')) || 0;
-                }
-            } catch (headError) {
-                // HEAD failed, continue with GET request
-                headResponse = null;
-            }
-            
-            // 2. Dynamic Timeout Based on File Size
-            let timeout = 3000; // Default 3 seconds
-            
-            if (contentLength > 100 * 1024 * 1024) { // > 100MB
-                timeout = 30000; // 30 seconds
-            } else if (contentLength > 10 * 1024 * 1024) { // > 10MB
-                timeout = 15000; // 15 seconds
-            } else if (contentLength > 1024 * 1024) { // > 1MB
-                timeout = 8000; // 8 seconds
-            }
-            
-            if (contentLength > 0) {
-                console.log(`[Scanner] ${processedFile}: Size ${Math.round(contentLength/1024)}KB, timeout ${timeout}ms`);
-            }
-            
-            // GET request with dynamic timeout
-            const getResponse = await Promise.race([
-                fetch(fileUrl, { method: 'GET' }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
-            ]);
-
-            if (getResponse.ok) {
-                const contentType = getResponse.headers.get('content-type') || 'unknown';
-                const responseContentLength = getResponse.headers.get('content-length');
-                let actualSize = parseInt(responseContentLength) || contentLength;
-                
-                // 3. Partial Download for Very Large Files
-                let text;
-                
-                if (actualSize > 50 * 1024 * 1024) { // > 50MB
-                    // Read only first 1MB for hash and preview
-                    const reader = getResponse.body.getReader();
-                    const chunks = [];
-                    let totalRead = 0;
-                    const maxRead = 1024 * 1024; // 1MB
-                    
-                    try {
-                        while (totalRead < maxRead) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
-                            chunks.push(value);
-                            totalRead += value.length;
-                        }
-                        reader.releaseLock();
-                        
-                        // Convert chunks to text
-                        const decoder = new TextDecoder();
-                        text = decoder.decode(new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], [])));
-                        
-                        console.log(`[Scanner] Large file ${processedFile}: Read ${Math.round(totalRead/1024)}KB of ${Math.round(actualSize/1024)}KB total`);
-                    } catch (readError) {
-                        // Fallback to full read if streaming fails
-                        text = await getResponse.text();
-                        actualSize = text.length;
-                    }
-                } else {
-                    // Normal read for smaller files
-                    text = await getResponse.text();
-                    actualSize = text.length;
-                }
-                
-                const hash = simpleHash(text);
-                
-                responses.push({
-                    file: processedFile, // Store the processed filename
-                    url: fileUrl,
-                    status: getResponse.status,
-                    contentType: contentType,
-                    size: actualSize,
-                    text: text,
-                    hash: hash
+            const batchPromises = batch.map(async (file) => {
+                const result = await scanSingleFile(file, baseUrl, previewLength);
+                completedCount++;
+                chrome.runtime.sendMessage({
+                    action: 'scanProgress',
+                    completed: completedCount,
+                    total: filesList.length,
+                    currentFile: file
                 });
-                
-                console.log(`[Scanner] Successfully scanned ${processedFile}: ${Math.round(actualSize/1024)}KB`);
+                return result;
+            });
+            
+            const batchResults = await Promise.all(batchPromises);
+            batchResults.forEach(r => { if (r) responses.push(r); });
+            
+            // Rate limiting delay between batches
+            if (requestDelay > 0 && i + parallelConcurrency < filesList.length) {
+                await sleep(requestDelay);
             }
-        } catch (error) {
-            console.log(`[Scanner] Failed to scan ${processedFile}: ${error.message}`);
-            // Request failed (timeout, network error, etc.)
-            // Don't add to responses - only successful requests are considered
+        }
+    } else {
+        // Sequential engine: one file at a time with delay
+        console.log(`[Scanner] Using SEQUENTIAL engine (delay: ${requestDelay}ms)`);
+        
+        for (let i = 0; i < filesList.length; i++) {
+            const file = filesList[i];
+            
+            chrome.runtime.sendMessage({
+                action: 'scanProgress',
+                completed: i,
+                total: filesList.length,
+                currentFile: file
+            });
+            
+            const result = await scanSingleFile(file, baseUrl, previewLength);
+            if (result) responses.push(result);
+            
+            // Rate limiting delay between requests
+            if (requestDelay > 0 && i < filesList.length - 1) {
+                await sleep(requestDelay);
+            }
         }
     }
     
@@ -663,124 +675,18 @@ async function scanSensitiveFilesWithProgress(filesList, previewLength, baseUrl,
         currentFile: 'Processing results...'
     });
     
-    // Step 3: Filter false positives (same logic as original function)
+    // Step 3: Filter false positives
     let filtered = responses;
     
     if (falsePositiveProtection) {
-        console.log('[Scanner] Starting filters with', responses.length, 'responses');
-        
-        // 3a. Remove responses matching baseline 404
-        if (baseline404 && baseline404.status === 200) {
-            const beforeCount = filtered.length;
-            filtered = responses.filter(r => {
-                // If hash matches baseline, it's a false positive
-                if (r.hash === baseline404.hash) return false;
-                // If size matches baseline exactly, likely same page
-                if (r.size === baseline404.size) return false;
-                return true;
-            });
-            console.log('[Scanner] After baseline filter:', filtered.length, '(removed', beforeCount - filtered.length, ')');
-        }
-        
-        // 3b. Enhanced duplicate detection - size ranges + content similarity
-        const beforeSizeFilter = filtered.length;
-        
-        // Group responses by similar sizes (within 10% range)
-        const sizeGroups = {};
-        filtered.forEach(r => {
-            let foundGroup = false;
-            for (const groupSize in sizeGroups) {
-                const groupSizeNum = parseInt(groupSize);
-                const sizeDiff = Math.abs(r.size - groupSizeNum) / Math.max(r.size, groupSizeNum);
-                if (sizeDiff <= 0.1) { // Within 10% size difference
-                    sizeGroups[groupSize].push(r);
-                    foundGroup = true;
-                    break;
-                }
-            }
-            if (!foundGroup) {
-                sizeGroups[r.size] = [r];
-            }
-        });
-        
-        // Check for suspicious groups (5+ files with similar sizes)
-        const suspiciousFiles = new Set();
-        for (const groupSize in sizeGroups) {
-            const group = sizeGroups[groupSize];
-            if (group.length >= 5) {
-                // Additional check: compare content similarity within the group
-                const contentHashes = group.map(r => {
-                    // Use first 1KB for content comparison
-                    const sample = r.text.substring(0, 1024);
-                    return sample.replace(/\s+/g, ' ').trim(); // Normalize whitespace
-                });
-                
-                // If most files in the group have very similar content, mark as suspicious
-                const uniqueContent = new Set(contentHashes);
-                if (uniqueContent.size <= 2) { // 2 or fewer unique content patterns
-                    console.log('[Scanner] Found suspicious size group:', group.length, 'files with similar sizes and content');
-                    group.forEach(r => suspiciousFiles.add(r.url));
-                }
-            }
-        }
-        
-        // Filter out suspicious files
-        filtered = filtered.filter(r => !suspiciousFiles.has(r.url));
-        console.log('[Scanner] After enhanced size+content filter:', filtered.length, '(removed', beforeSizeFilter - filtered.length, ')');
-        
-        // 3c. Check for identical HTML structure (catch-all pages)
-        const beforeHtmlFilter = filtered.length;
-        const htmlStructures = {};
-        
-        filtered.forEach(r => {
-            if (r.contentType && r.contentType.includes('text/html')) {
-                // Extract HTML structure signature (first 500 chars, remove dynamic content)
-                let structure = r.text.substring(0, 500)
-                    .replace(/\d+/g, 'NUM') // Replace numbers
-                    .replace(/[a-f0-9]{8,}/gi, 'HASH') // Replace long hex strings
-                    .replace(/\s+/g, ' ') // Normalize whitespace
-                    .trim();
-                
-                if (!htmlStructures[structure]) {
-                    htmlStructures[structure] = [];
-                }
-                htmlStructures[structure].push(r);
-            }
-        });
-        
-        // If 4+ files have identical HTML structure, likely catch-all
-        const htmlSuspiciousFiles = new Set();
-        for (const structure in htmlStructures) {
-            const group = htmlStructures[structure];
-            if (group.length >= 4) {
-                console.log('[Scanner] Found identical HTML structure in', group.length, 'files');
-                group.forEach(r => htmlSuspiciousFiles.add(r.url));
-            }
-        }
-        
-        filtered = filtered.filter(r => !htmlSuspiciousFiles.has(r.url));
-        console.log('[Scanner] After HTML structure filter:', filtered.length, '(removed', beforeHtmlFilter - filtered.length, ')');
-        
-        // 3d. Check for 404 indicators in content
-        const before404Filter = filtered.length;
-        filtered = filtered.filter(r => {
-            const is404 = looksLike404Page(r.text, r.contentType);
-            if (is404) console.log('[Scanner] Filtered as 404:', r.file);
-            return !is404;
-        });
-        console.log('[Scanner] After 404 pattern filter:', filtered.length, '(removed', before404Filter - filtered.length, ')');
-        
-        // 3e. Remove suspiciously small responses (< 10 bytes, likely empty or minimal)
-        const beforeSizeMinFilter = filtered.length;
-        filtered = filtered.filter(r => r.size >= 10);
-        console.log('[Scanner] After min-size filter:', filtered.length, '(removed', beforeSizeMinFilter - filtered.length, ')');
+        filtered = filterFalsePositives(responses, baseline404);
     }
     
     // Step 4: Build final results
+    const foundFiles = [];
     for (const r of filtered) {
         const preview = r.text.substring(0, previewLength).trim() || 
                        r.text.substring(0, previewLength * 5).trim();
-        
         foundFiles.push({
             file: r.file,
             url: r.url,
@@ -793,4 +699,101 @@ async function scanSensitiveFilesWithProgress(filesList, previewLength, baseUrl,
     }
 
     return foundFiles;
+}
+
+// Shared false positive filtering logic
+function filterFalsePositives(responses, baseline404) {
+    let filtered = [...responses];
+    console.log('[Scanner] Starting filters with', responses.length, 'responses');
+    
+    // 3a. Remove responses matching baseline 404
+    if (baseline404 && baseline404.status === 200) {
+        const beforeCount = filtered.length;
+        filtered = filtered.filter(r => {
+            if (r.hash === baseline404.hash) return false;
+            if (r.size === baseline404.size) return false;
+            return true;
+        });
+        console.log('[Scanner] After baseline filter:', filtered.length, '(removed', beforeCount - filtered.length, ')');
+    }
+    
+    // 3b. Enhanced duplicate detection - size ranges + content similarity
+    const beforeSizeFilter = filtered.length;
+    const sizeGroups = {};
+    filtered.forEach(r => {
+        let foundGroup = false;
+        for (const groupSize in sizeGroups) {
+            const groupSizeNum = parseInt(groupSize);
+            const sizeDiff = Math.abs(r.size - groupSizeNum) / Math.max(r.size, groupSizeNum);
+            if (sizeDiff <= 0.1) {
+                sizeGroups[groupSize].push(r);
+                foundGroup = true;
+                break;
+            }
+        }
+        if (!foundGroup) {
+            sizeGroups[r.size] = [r];
+        }
+    });
+    
+    const suspiciousFiles = new Set();
+    for (const groupSize in sizeGroups) {
+        const group = sizeGroups[groupSize];
+        if (group.length >= 5) {
+            const contentHashes = group.map(r => {
+                const sample = r.text.substring(0, 1024);
+                return sample.replace(/\s+/g, ' ').trim();
+            });
+            const uniqueContent = new Set(contentHashes);
+            if (uniqueContent.size <= 2) {
+                console.log('[Scanner] Found suspicious size group:', group.length, 'files with similar sizes and content');
+                group.forEach(r => suspiciousFiles.add(r.url));
+            }
+        }
+    }
+    filtered = filtered.filter(r => !suspiciousFiles.has(r.url));
+    console.log('[Scanner] After enhanced size+content filter:', filtered.length, '(removed', beforeSizeFilter - filtered.length, ')');
+    
+    // 3c. Check for identical HTML structure (catch-all pages)
+    const beforeHtmlFilter = filtered.length;
+    const htmlStructures = {};
+    filtered.forEach(r => {
+        if (r.contentType && r.contentType.includes('text/html')) {
+            let structure = r.text.substring(0, 500)
+                .replace(/\d+/g, 'NUM')
+                .replace(/[a-f0-9]{8,}/gi, 'HASH')
+                .replace(/\s+/g, ' ')
+                .trim();
+            if (!htmlStructures[structure]) {
+                htmlStructures[structure] = [];
+            }
+            htmlStructures[structure].push(r);
+        }
+    });
+    const htmlSuspiciousFiles = new Set();
+    for (const structure in htmlStructures) {
+        const group = htmlStructures[structure];
+        if (group.length >= 4) {
+            console.log('[Scanner] Found identical HTML structure in', group.length, 'files');
+            group.forEach(r => htmlSuspiciousFiles.add(r.url));
+        }
+    }
+    filtered = filtered.filter(r => !htmlSuspiciousFiles.has(r.url));
+    console.log('[Scanner] After HTML structure filter:', filtered.length, '(removed', beforeHtmlFilter - filtered.length, ')');
+    
+    // 3d. Check for 404 indicators in content
+    const before404Filter = filtered.length;
+    filtered = filtered.filter(r => {
+        const is404 = looksLike404Page(r.text, r.contentType);
+        if (is404) console.log('[Scanner] Filtered as 404:', r.file);
+        return !is404;
+    });
+    console.log('[Scanner] After 404 pattern filter:', filtered.length, '(removed', before404Filter - filtered.length, ')');
+    
+    // 3e. Remove suspiciously small responses (< 10 bytes)
+    const beforeSizeMinFilter = filtered.length;
+    filtered = filtered.filter(r => r.size >= 10);
+    console.log('[Scanner] After min-size filter:', filtered.length, '(removed', beforeSizeMinFilter - filtered.length, ')');
+    
+    return filtered;
 }
