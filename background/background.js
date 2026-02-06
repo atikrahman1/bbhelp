@@ -13,6 +13,11 @@ let showNotifications = true; // Default: enabled
 let customPorts = []; // Custom port list for HTTP scanning
 let autoPortScan = false; // Auto port scan on page load
 
+// Track active scans per tab
+let activeScans = {
+  // tabId: { type: 'sensitive' | 'port', startTime: timestamp, total: number, completed: number }
+};
+
 // Load settings from storage
 chrome.storage.local.get(['scannerEnabled', 'sensitiveFilesList', 'previewLength', 'exclusionList', 'customCommands', 'customDorks', 'customTools', 'rescanInterval', 'falsePositiveProtection', 'showNotifications', 'customPorts', 'autoPortScan'], (result) => {
   scannerEnabled = result.scannerEnabled || false;
@@ -304,6 +309,34 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       }
     }
   }
+});
+
+// Listen for tab activation (switching between tabs)
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tabId = activeInfo.tabId;
+  
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError || !tab.url) {
+      return;
+    }
+    
+    try {
+      const url = new URL(tab.url);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        const domain = url.host;
+        
+        // Check if domain is excluded
+        if (isDomainExcluded(domain)) {
+          return;
+        }
+        
+        // Load existing results and update badge
+        loadExistingResults(tabId, domain);
+      }
+    } catch (e) {
+      // Invalid URL, ignore
+    }
+  });
 });
 
 // Check if domain matches exclusion patterns
@@ -674,6 +707,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
       const url = new URL(request.url);
       const domain = url.host;
+      
+      // Determine base URL based on scanMainHost parameter
+      let baseUrl;
+      if (request.scanMainHost === false) {
+        // Scan current URL path: example.com/somepath/FUZZ
+        const pathWithoutFile = url.pathname.substring(0, url.pathname.lastIndexOf('/') + 1);
+        baseUrl = `${url.protocol}//${url.host}${pathWithoutFile}`;
+        // Remove double slash if path already ends with /
+        baseUrl = baseUrl.replace(/([^:]\/)\/+/g, '$1');
+      } else {
+        // Scan main host: example.com/FUZZ (default behavior)
+        baseUrl = `${url.protocol}//${url.host}/`;
+      }
+      
+      console.log('Base URL for scan:', baseUrl); // Debug log
 
       // Clear scan history to force rescan
       chrome.storage.local.remove([`scanHistory_${domain}`], () => {
@@ -682,7 +730,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           action: 'scanSensitiveFilesWithProgress',
           filesList: sensitiveFilesList,
           previewLength: previewLength,
-          baseUrl: `${url.protocol}//${url.host}`,
+          baseUrl: baseUrl,
           falsePositiveProtection: falsePositiveProtection
         }, (response) => {
           if (chrome.runtime.lastError) {
@@ -697,7 +745,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                   action: 'scanSensitiveFilesWithProgress',
                   filesList: sensitiveFilesList,
                   previewLength: previewLength,
-                  baseUrl: `${url.protocol}//${url.host}`,
+                  baseUrl: baseUrl,
                   falsePositiveProtection: falsePositiveProtection
                 }, (retryResponse) => {
                   if (retryResponse && retryResponse.foundFiles) {
@@ -767,7 +815,173 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: true });
     });
     return true;
+  } else if (request.action === 'scanStarted') {
+    // Track that a scan has started
+    activeScans[request.tabId] = {
+      type: request.scanType,
+      startTime: Date.now(),
+      total: request.total || 0,
+      completed: 0
+    };
+    sendResponse({ success: true });
+  } else if (request.action === 'scanProgress') {
+    // Update scan progress
+    if (activeScans[request.tabId]) {
+      activeScans[request.tabId].completed = request.completed;
+      activeScans[request.tabId].total = request.total;
+    }
+    // Forward progress to popup if it's listening
+    chrome.runtime.sendMessage(request).catch(() => {
+      // Popup not open, ignore
+    });
+  } else if (request.action === 'scanCompleted') {
+    // Remove from active scans
+    delete activeScans[request.tabId];
+    sendResponse({ success: true });
+  } else if (request.action === 'getActiveScan') {
+    // Check if tab has active scan
+    const scan = activeScans[request.tabId];
+    if (scan) {
+      sendResponse({
+        isScanning: true,
+        scanType: scan.type,
+        total: scan.total,
+        completed: scan.completed,
+        startTime: scan.startTime
+      });
+    } else {
+      sendResponse({ isScanning: false });
+    }
+    return true;
+  } else if (request.action === 'startPortScan') {
+    // Start port scan in background
+    const tabId = request.tabId;
+    const domain = request.domain;
+    
+    // Mark scan as started
+    activeScans[tabId] = {
+      type: 'port',
+      startTime: Date.now(),
+      total: customPorts.length,
+      completed: 0
+    };
+    
+    // Start scanning in background
+    performPortScan(tabId, domain);
+    sendResponse({ success: true, message: 'Port scan started' });
+    return true;
   }
 
   return true;
 });
+
+// Perform port scan in background
+async function performPortScan(tabId, domain) {
+  const results = [];
+  
+  for (let i = 0; i < customPorts.length; i++) {
+    const portInfo = customPorts[i];
+    
+    try {
+      const isOpen = await checkPortFromBackground(domain, portInfo.port);
+      const status = isOpen ? 'open' : 'closed';
+      
+      results.push({
+        port: portInfo.port,
+        service: portInfo.service,
+        status: status,
+        timestamp: Date.now()
+      });
+      
+      // Save partial results immediately
+      chrome.storage.local.set({ 
+        [`portScanResults_${domain}`]: {
+          domain: domain,
+          results: results,
+          timestamp: Date.now(),
+          inProgress: true
+        }
+      });
+      
+      // Update progress
+      if (activeScans[tabId]) {
+        activeScans[tabId].completed = i + 1;
+      }
+      
+      // Send progress update to popup
+      chrome.runtime.sendMessage({
+        action: 'portScanProgress',
+        tabId: tabId,
+        completed: i + 1,
+        total: customPorts.length,
+        currentPort: portInfo.port,
+        currentService: portInfo.service,
+        result: { port: portInfo.port, service: portInfo.service, status: status }
+      }).catch(() => {
+        // Popup not open, ignore
+      });
+      
+    } catch (error) {
+      results.push({
+        port: portInfo.port,
+        service: portInfo.service,
+        status: 'timeout',
+        timestamp: Date.now()
+      });
+      
+      // Save partial results immediately
+      chrome.storage.local.set({ 
+        [`portScanResults_${domain}`]: {
+          domain: domain,
+          results: results,
+          timestamp: Date.now(),
+          inProgress: true
+        }
+      });
+      
+      // Update progress
+      if (activeScans[tabId]) {
+        activeScans[tabId].completed = i + 1;
+      }
+      
+      // Send progress update
+      chrome.runtime.sendMessage({
+        action: 'portScanProgress',
+        tabId: tabId,
+        completed: i + 1,
+        total: customPorts.length,
+        currentPort: portInfo.port,
+        currentService: portInfo.service,
+        result: { port: portInfo.port, service: portInfo.service, status: 'timeout' }
+      }).catch(() => {
+        // Popup not open, ignore
+      });
+    }
+  }
+  
+  // Store final results
+  const scanResults = {
+    domain: domain,
+    results: results,
+    timestamp: Date.now(),
+    inProgress: false
+  };
+  
+  chrome.storage.local.set({ [`portScanResults_${domain}`]: scanResults });
+  
+  // Remove from active scans
+  delete activeScans[tabId];
+  
+  // Notify completion
+  const openPorts = results.filter(r => r.status === 'open').length;
+  chrome.runtime.sendMessage({
+    action: 'portScanComplete',
+    tabId: tabId,
+    results: results,
+    openPorts: openPorts
+  }).catch(() => {
+    // Popup not open, ignore
+  });
+  
+  console.log(`[Port Scanner] Scan complete for ${domain}: ${openPorts} open ports`);
+}

@@ -162,6 +162,58 @@ function executeDork(dork) {
   });
 }
 
+// Open all dorks at once
+function openAllDorks() {
+  chrome.storage.local.get(['customDorks'], (result) => {
+    let dorks = result.customDorks;
+    
+    // If no dorks in storage, use defaults
+    if (!dorks || dorks.length === 0) {
+      dorks = [
+        { name: 'Login Pages', dork: 'site:{DOMAIN} inurl:login' },
+        { name: 'Text Files', dork: 'site:{DOMAIN} filetype:txt' },
+        { name: 'PDF Files', dork: 'site:{DOMAIN} filetype:pdf' },
+        { name: 'Admin Pages', dork: 'site:{DOMAIN} inurl:admin' },
+        { name: 'Config Files', dork: 'site:{DOMAIN} filetype:config' },
+        { name: 'SQL Files', dork: 'site:{DOMAIN} filetype:sql' },
+        { name: 'ENV Files', dork: 'site:{DOMAIN} filetype:env' },
+        { name: 'Backup Files', dork: 'site:{DOMAIN} inurl:backup' }
+      ];
+    }
+    
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        try {
+          const url = new URL(tabs[0].url);
+          const domain = url.hostname.replace('www.', '');
+
+          // Open each dork in a new tab
+          dorks.forEach((dorkObj, index) => {
+            // Add small delay between tabs to avoid browser blocking
+            setTimeout(() => {
+              const finalDork = dorkObj.dork.replace(/\{DOMAIN\}/g, domain);
+              const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(finalDork)}`;
+              chrome.tabs.create({ url: searchUrl, active: false }); // Don't activate each tab
+            }, index * 100); // 100ms delay between each tab
+          });
+          
+          showMessage(`Opening ${dorks.length} Google Dorks...`, 'success');
+        } catch (e) {
+          // If URL parsing fails, open with placeholders
+          dorks.forEach((dorkObj, index) => {
+            setTimeout(() => {
+              const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(dorkObj.dork)}`;
+              chrome.tabs.create({ url: searchUrl, active: false });
+            }, index * 100);
+          });
+          
+          showMessage(`Opening ${dorks.length} Google Dorks...`, 'success');
+        }
+      }
+    });
+  });
+}
+
 // Load dorks on popup open (after DOM is ready) - consolidated with other DOMContentLoaded below
 
 // Load and render custom tools
@@ -402,14 +454,14 @@ document.getElementById('rescan-now').addEventListener('click', () => {
         const urlObj = new URL(url);
         if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
           button.disabled = false;
-          button.textContent = 'Scan';
+          button.textContent = 'Scan Main Host';
           progressDiv.style.display = 'none';
           showMessage('Cannot scan this page. Only HTTP/HTTPS pages are supported.');
           return;
         }
       } catch (e) {
         button.disabled = false;
-        button.textContent = 'Scan';
+        button.textContent = 'Scan Main Host';
         progressDiv.style.display = 'none';
         showMessage('Invalid URL');
         return;
@@ -419,16 +471,22 @@ document.getElementById('rescan-now').addEventListener('click', () => {
       chrome.runtime.sendMessage({
         action: 'forceRescanWithProgress',
         tabId: tabs[0].id,
-        url: url
+        url: url,
+        scanMainHost: true
       }, (response) => {
         console.log('Received response from background:', response); // Debug log
         button.disabled = false;
-        button.textContent = 'Scan';
+        button.textContent = 'Scan Main Host';
         progressDiv.style.display = 'none';
 
         if (chrome.runtime.lastError) {
           console.log('Chrome runtime error:', chrome.runtime.lastError); // Debug log
           showMessage('Error: ' + chrome.runtime.lastError.message, 'error');
+          // Notify background that scan completed (even on error)
+          chrome.runtime.sendMessage({
+            action: 'scanCompleted',
+            tabId: tabs[0].id
+          });
         } else if (response && response.success) {
           console.log('Response success, calling storeScanResult'); // Debug log
           // Store scan result in history
@@ -440,10 +498,122 @@ document.getElementById('rescan-now').addEventListener('click', () => {
           } else {
             showMessage(response.message || 'Scan completed! No sensitive files found.', 'success');
           }
+          
+          // Notify background that scan completed
+          chrome.runtime.sendMessage({
+            action: 'scanCompleted',
+            tabId: tabs[0].id
+          });
         } else {
           console.log('Response failed or invalid:', response); // Debug log
           showMessage(response?.message || 'Failed to start scan.', 'error');
+          // Notify background that scan completed (even on failure)
+          chrome.runtime.sendMessage({
+            action: 'scanCompleted',
+            tabId: tabs[0].id
+          });
         }
+      });
+      
+      // Notify background that scan started
+      chrome.runtime.sendMessage({
+        action: 'scanStarted',
+        tabId: tabs[0].id,
+        scanType: 'sensitive',
+        total: 0 // Will be updated by progress messages
+      });
+    }
+  });
+});
+
+// Force rescan current URL button
+document.getElementById('rescan-current-url').addEventListener('click', () => {
+  const button = document.getElementById('rescan-current-url');
+  const progressDiv = document.getElementById('sensitive-scan-progress');
+  const progressFill = document.getElementById('sensitive-progress-fill');
+  const progressText = document.getElementById('sensitive-progress-text');
+  
+  button.disabled = true;
+  button.textContent = 'Scanning...';
+  progressDiv.style.display = 'block';
+  progressFill.style.width = '0%';
+  progressText.textContent = 'Starting scan...';
+
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      const url = tabs[0].url;
+
+      try {
+        const urlObj = new URL(url);
+        if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+          button.disabled = false;
+          button.textContent = 'Scan Current URL';
+          progressDiv.style.display = 'none';
+          showMessage('Cannot scan this page. Only HTTP/HTTPS pages are supported.');
+          return;
+        }
+      } catch (e) {
+        button.disabled = false;
+        button.textContent = 'Scan Current URL';
+        progressDiv.style.display = 'none';
+        showMessage('Invalid URL');
+        return;
+      }
+
+      // Send message to background to scan with progress tracking
+      chrome.runtime.sendMessage({
+        action: 'forceRescanWithProgress',
+        tabId: tabs[0].id,
+        url: url,
+        scanMainHost: false
+      }, (response) => {
+        console.log('Received response from background:', response); // Debug log
+        button.disabled = false;
+        button.textContent = 'Scan Current URL';
+        progressDiv.style.display = 'none';
+
+        if (chrome.runtime.lastError) {
+          console.log('Chrome runtime error:', chrome.runtime.lastError); // Debug log
+          showMessage('Error: ' + chrome.runtime.lastError.message, 'error');
+          // Notify background that scan completed (even on error)
+          chrome.runtime.sendMessage({
+            action: 'scanCompleted',
+            tabId: tabs[0].id
+          });
+        } else if (response && response.success) {
+          console.log('Response success, calling storeScanResult'); // Debug log
+          // Store scan result in history
+          storeScanResult(url, response.foundFiles || [], response.totalScanned || 0, response.protectionEnabled || true);
+          
+          // Show appropriate message based on results
+          if (response.count > 0) {
+            showMessage(response.message || `Found ${response.count} sensitive file(s)!`, 'warning');
+          } else {
+            showMessage(response.message || 'Scan completed! No sensitive files found.', 'success');
+          }
+          
+          // Notify background that scan completed
+          chrome.runtime.sendMessage({
+            action: 'scanCompleted',
+            tabId: tabs[0].id
+          });
+        } else {
+          console.log('Response failed or invalid:', response); // Debug log
+          showMessage(response?.message || 'Failed to start scan.', 'error');
+          // Notify background that scan completed (even on failure)
+          chrome.runtime.sendMessage({
+            action: 'scanCompleted',
+            tabId: tabs[0].id
+          });
+        }
+      });
+      
+      // Notify background that scan started
+      chrome.runtime.sendMessage({
+        action: 'scanStarted',
+        tabId: tabs[0].id,
+        scanType: 'sensitive',
+        total: 0 // Will be updated by progress messages
       });
     }
   });
@@ -918,7 +1088,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       viewButton.style.display = 'none';
     }
   } else if (request.action === 'scanProgress') {
-    // Update progress bar
+    // Update progress bar for sensitive file scan
     const progressFill = document.getElementById('sensitive-progress-fill');
     const progressText = document.getElementById('sensitive-progress-text');
     
@@ -927,6 +1097,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       progressFill.style.width = percentage + '%';
       progressText.textContent = `Scanning ${request.currentFile} (${request.completed}/${request.total})`;
     }
+  } else if (request.action === 'portScanProgress') {
+    // Update progress bar for port scan
+    const progressFill = document.getElementById('port-progress-fill');
+    const progressText = document.getElementById('port-progress-text');
+    const resultsDiv = document.getElementById('port-scan-results');
+    
+    if (progressFill && progressText) {
+      const percentage = (request.completed / request.total) * 100;
+      progressFill.style.width = percentage + '%';
+      progressText.textContent = `Checking port ${request.currentPort} (${request.currentService})...`;
+    }
+    
+    // Add result to UI
+    if (resultsDiv && request.result) {
+      addPortResult(request.result.port, request.result.service, request.result.status);
+    }
+  } else if (request.action === 'portScanComplete') {
+    // Port scan completed
+    const button = document.getElementById('port-scanner');
+    const progressText = document.getElementById('port-progress-text');
+    
+    if (button) {
+      button.disabled = false;
+      button.textContent = '🔍 Scan HTTP Ports';
+    }
+    
+    if (progressText) {
+      progressText.textContent = `Scan complete! Found ${request.openPorts} open ports.`;
+    }
+    
+    // Show results dropdown
+    if (request.results) {
+      showPortResultsDropdown(request.results);
+    }
+    
+    showMessage(`Port scan complete! ${request.openPorts} ports open.`, 'success');
   }
 });
 
@@ -1163,23 +1369,13 @@ function importConfiguration() {
 // Global variable for custom ports
 let customPortsList = [];
 
-// Start port scanning
+// Start port scanning (now delegates to background)
 async function startPortScan() {
-  console.log('startPortScan called, currentDomain:', currentDomain); // Debug log
+  console.log('startPortScan called, currentDomain:', currentDomain);
   
   if (!currentDomain) {
-    console.error('No currentDomain available'); // Debug log
+    console.error('No currentDomain available');
     showMessage('No valid domain found', 'error');
-    return;
-  }
-
-  // Load custom ports if not already loaded
-  if (customPortsList.length === 0) {
-    await loadCustomPorts();
-  }
-
-  if (customPortsList.length === 0) {
-    showMessage('No ports configured. Please configure ports first.', 'error');
     return;
   }
 
@@ -1195,52 +1391,27 @@ async function startPortScan() {
   progressDiv.style.display = 'block';
   progressFill.style.width = '0%';
   resultsDiv.innerHTML = '';
+  progressText.textContent = 'Starting port scan...';
 
-  const results = [];
-  let completed = 0;
-
-  for (let i = 0; i < customPortsList.length; i++) {
-    const { port, service } = customPortsList[i];
+  // Get current tab and start scan in background
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0]) return;
     
-    try {
-      progressText.textContent = `Checking port ${port} (${service})...`;
-      
-      const isOpen = await checkPort(currentDomain, port);
-      const status = isOpen ? 'open' : 'closed';
-      
-      results.push({ port, service, status, timestamp: Date.now() });
-      
-      // Add result to UI immediately
-      addPortResult(port, service, status);
-      
-    } catch (error) {
-      results.push({ port, service, status: 'timeout', timestamp: Date.now() });
-      addPortResult(port, service, 'timeout');
-    }
-    
-    completed++;
-    const progress = (completed / customPortsList.length) * 100;
-    progressFill.style.width = progress + '%';
-  }
-
-  // Store results for dropdown
-  const scanResults = {
-    domain: currentDomain,
-    results: results,
-    timestamp: Date.now()
-  };
-  
-  chrome.storage.local.set({ [`portScanResults_${currentDomain}`]: scanResults });
-
-  // Scan complete
-  button.disabled = false;
-  button.textContent = '🔍 Scan HTTP Ports';
-  progressText.textContent = `Scan complete! Found ${results.filter(r => r.status === 'open').length} open ports.`;
-  
-  // Show results dropdown
-  showPortResultsDropdown(results);
-  
-  showMessage(`Port scan complete! ${results.filter(r => r.status === 'open').length} ports open.`, 'success');
+    chrome.runtime.sendMessage({
+      action: 'startPortScan',
+      tabId: tabs[0].id,
+      domain: currentDomain
+    }, (response) => {
+      if (response && response.success) {
+        console.log('Port scan started in background');
+      } else {
+        button.disabled = false;
+        button.textContent = '🔍 Scan HTTP Ports';
+        progressDiv.style.display = 'none';
+        showMessage('Failed to start port scan', 'error');
+      }
+    });
+  });
 }
 
 // Check if a port is open
@@ -1342,38 +1513,25 @@ function showPortResultsDropdown(results) {
     <span style="color: #f39c12;">⏱️ ${timeoutPorts.length} Timeout</span>
   `;
   
-  list.innerHTML = results.map(result => {
-    let statusIcon = '';
-    let statusClass = '';
-    let statusText = '';
-    
-    if (result.status === 'open') {
-      statusIcon = '✅';
-      statusClass = 'port-open';
-      statusText = 'Open';
-    } else if (result.status === 'closed') {
-      statusIcon = '❌';
-      statusClass = 'port-closed';
-      statusText = 'Closed';
-    } else {
-      statusIcon = '⏱️';
-      statusClass = 'port-timeout';
-      statusText = 'Timeout';
-    }
-    
-    const url = result.status === 'open' ? 
-      `${[443, 8443, 4443, 9443].includes(result.port) ? 'https' : 'http'}://${currentDomain}:${result.port}` : '';
+  // Only show open ports in the list
+  list.innerHTML = openPorts.map(result => {
+    const url = `${[443, 8443, 4443, 9443].includes(result.port) ? 'https' : 'http'}://${currentDomain}:${result.port}`;
     
     return `
       <div class="port-result" style="display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #444;">
         <span>Port ${result.port} (${result.service})</span>
-        <span class="${statusClass}" style="display: flex; align-items: center; gap: 5px;">
-          ${statusIcon} ${statusText}
-          ${url ? `<a href="${url}" target="_blank" style="color: #3498db; text-decoration: none; margin-left: 5px;" title="Open ${url}">🔗</a>` : ''}
+        <span class="port-open" style="display: flex; align-items: center; gap: 5px;">
+          ✅ Open
+          <a href="${url}" target="_blank" style="color: #3498db; text-decoration: none; margin-left: 5px;" title="Open ${url}">🔗</a>
         </span>
       </div>
     `;
   }).join('');
+  
+  // Show message if no open ports found
+  if (openPorts.length === 0) {
+    list.innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">No open ports found</div>';
+  }
   
   dropdown.style.display = 'block';
 }
@@ -1403,6 +1561,17 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCustomTools();
   loadCustomCommands();
   loadCustomPorts();
+  
+  // Check for active scans and restore UI
+  checkForActiveScans();
+  
+  // Open all dorks button
+  const openAllDorksBtn = document.getElementById('open-all-dorks');
+  if (openAllDorksBtn) {
+    openAllDorksBtn.addEventListener('click', () => {
+      openAllDorks();
+    });
+  }
   
   // Load auto port scan setting
   chrome.runtime.sendMessage({ action: 'getSettings' }, (response) => {
@@ -1448,3 +1617,83 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load existing port results if available
   setTimeout(loadExistingPortResults, 500);
 });
+
+// Check for active scans when popup opens
+function checkForActiveScans() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs[0]) return;
+    
+    chrome.runtime.sendMessage({
+      action: 'getActiveScan',
+      tabId: tabs[0].id
+    }, (response) => {
+      if (response && response.isScanning) {
+        console.log('Active scan detected:', response.scanType, 'Progress:', response.completed, '/', response.total);
+        
+        if (response.scanType === 'sensitive') {
+          // Restore sensitive file scan UI
+          const progressDiv = document.getElementById('sensitive-scan-progress');
+          const progressFill = document.getElementById('sensitive-progress-fill');
+          const progressText = document.getElementById('sensitive-progress-text');
+          const button = document.getElementById('rescan-now');
+          const buttonCurrentUrl = document.getElementById('rescan-current-url');
+          
+          if (progressDiv && progressFill && progressText) {
+            progressDiv.style.display = 'block';
+            const percentage = response.total > 0 ? (response.completed / response.total) * 100 : 0;
+            progressFill.style.width = percentage + '%';
+            progressText.textContent = response.total > 0 ? 
+              `Scanning... (${response.completed}/${response.total})` : 
+              'Starting scan...';
+          }
+          
+          if (button) {
+            button.disabled = true;
+            button.textContent = 'Scanning...';
+          }
+          if (buttonCurrentUrl) {
+            buttonCurrentUrl.disabled = true;
+            buttonCurrentUrl.textContent = 'Scanning...';
+          }
+        } else if (response.scanType === 'port') {
+          // Restore port scan UI
+          const progressDiv = document.getElementById('port-scan-progress');
+          const progressFill = document.getElementById('port-progress-fill');
+          const progressText = document.getElementById('port-progress-text');
+          const resultsDiv = document.getElementById('port-scan-results');
+          const button = document.getElementById('port-scanner');
+          
+          if (progressDiv && progressFill && progressText) {
+            progressDiv.style.display = 'block';
+            const percentage = response.total > 0 ? (response.completed / response.total) * 100 : 0;
+            progressFill.style.width = percentage + '%';
+            progressText.textContent = response.total > 0 ? 
+              `Scanning ports... (${response.completed}/${response.total})` : 
+              'Starting port scan...';
+          }
+          
+          if (button) {
+            button.disabled = true;
+            button.textContent = '🔍 Scanning...';
+          }
+          
+          // Restore partial results from storage
+          if (resultsDiv && currentDomain) {
+            chrome.storage.local.get([`portScanResults_${currentDomain}`], (result) => {
+              const scanResults = result[`portScanResults_${currentDomain}`];
+              if (scanResults && scanResults.results) {
+                // Clear and repopulate results
+                resultsDiv.innerHTML = '';
+                scanResults.results.forEach(portResult => {
+                  addPortResult(portResult.port, portResult.service, portResult.status);
+                });
+              }
+            });
+          }
+        }
+      } else {
+        console.log('No active scan found for this tab');
+      }
+    });
+  });
+}

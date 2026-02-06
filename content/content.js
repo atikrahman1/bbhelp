@@ -271,7 +271,9 @@ async function scanSensitiveFiles(filesList, previewLength, baseUrl, falsePositi
     for (const file of filesList) {
         // Replace variables in file path
         const processedFile = replaceVariables(file, baseUrl);
-        const fileUrl = `${baseUrl}/${processedFile}`;
+        // Remove trailing slash from baseUrl if present to avoid double slashes
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const fileUrl = `${cleanBaseUrl}/${processedFile}`;
         
         try {
             // 1. HEAD Request First - Quick check if file exists and get size
@@ -548,7 +550,9 @@ async function scanSensitiveFilesWithProgress(filesList, previewLength, baseUrl,
         
         // Replace variables in file path
         const processedFile = replaceVariables(file, baseUrl);
-        const fileUrl = `${baseUrl}/${processedFile}`;
+        // Remove trailing slash from baseUrl if present to avoid double slashes
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const fileUrl = `${cleanBaseUrl}/${processedFile}`;
         
         try {
             // 1. HEAD Request First - Quick check if file exists and get size

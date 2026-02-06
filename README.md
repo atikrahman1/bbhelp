@@ -20,6 +20,7 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 - **Smart Timeouts**: Dynamic timeouts based on file size (3s to 30s)
 - **Results Dropdown**: View scan results with clickable links to open services
 - **Background Scanning**: Non-blocking scans with progress tracking
+- **Persistent Progress**: Scan continues in background, progress restores on popup reopen
 
 ### 📜 JavaScript Analysis
 <img width="1897" height="973" alt="bbhelp-3" src="https://github.com/user-attachments/assets/81eb31a8-e2b3-4fba-8241-053be04f164a" />
@@ -49,6 +50,10 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 - **Smart Timeouts**: 3s-30s based on file size, partial download for large files
 - **Auto-Scan**: Configurable scanning on page load
 - **Progress Tracking**: Real-time scanning progress with file-by-file updates
+- **Dual Scan Modes**: 
+  - **Scan Main Host**: Fuzzes at domain root (`example.com/FUZZ`)
+  - **Scan Current URL**: Fuzzes at current path (`example.com/admin/FUZZ`)
+- **Persistent Progress**: Scan continues even if popup is closed, progress restores on reopen
 
 ⚠️ **Warning**: Auto-scanning with large file lists can be very noisy and may get you blocked by target websites. The sensitive file fuzzer is designed to scan only small, targeted lists of files.
 
@@ -60,6 +65,7 @@ A comprehensive Chrome extension for bug bounty hunters and security researchers
 
 ### 🔍 Google Dorks & 📋 Copy Commands
 - **8 Default Dorks**: Login pages, admin panels, config files, backups
+- **Open All Dorks**: Launch all dorks at once in separate tabs
 - **6 Default Commands**: Nmap, Subfinder, FFUF, Nuclei
 - **Fully Customizable**: Add/edit/remove via management pages
 - **Variable Support**: `{DOMAIN}`, `{URL}`, `{TARGET}`, `{HOST}`, `{PROTOCOL}`
